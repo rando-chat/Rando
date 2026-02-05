@@ -1,0 +1,92 @@
+[general]
+project_id = "rando-chat"
+database_password = "secure_password_here"
+
+[auth]
+site_url = "https://yourdomain.com"
+enable_email_auth = true
+enable_email_signup = true
+enable_phone_auth = false
+auto_confirm_emails = true
+enable_confirmations = false
+
+[api]
+enabled = true
+port = 54321
+
+[db]
+port = 54322
+search_path = "public"
+
+[realtime]
+enabled = true
+port = 4000
+
+[storage]
+enabled = true
+file_size_limit = 5242880  # 5MB
+is_global_enabled = true
+
+[analytics]
+enabled = true
+
+[functions]
+enabled = true
+
+[edge_functions]
+enabled = true
+
+[img_transform]
+enabled = true
+
+[auth.external]
+apple = false
+azure = false
+bitbucket = false
+discord = false
+facebook = false
+github = false
+gitlab = false
+google = false
+keycloak = false
+linkedin = false
+notion = false
+slack = false
+spotify = false
+twitch = false
+twitter = false
+workos = false
+zoom = false
+
+[email]
+smtp_host = "smtp.resend.com"
+smtp_port = 587
+smtp_user = "resend"
+smtp_pass = "${RESEND_API_KEY}"
+smtp_admin_email = "hello@yourdomain.com"
+smtp_sender_name = "RANDO Chat"
+
+[email.templates]
+invite = """
+<h2>You've been invited!</h2>
+<p>Join RANDO Chat for free random conversations.</p>
+"""
+confirmation = """
+<h2>Confirm your email</h2>
+<p>Click the link to confirm: {{ .ConfirmationURL }}</p>
+"""
+recovery = """
+<h2>Reset your password</h2>
+<p>Click the link to reset: {{ .ConfirmationURL }}</p>
+"""
+email_change = """
+<h2>Confirm email change</h2>
+<p>Click the link to confirm: {{ .ConfirmationURL }}</p>
+"""
+
+[log_level]
+postgres = "warn"
+auth = "info"
+api = "info"
+realtime = "info"
+storage = "info"

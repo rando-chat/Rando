@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+  }
+
+  body {
+    @apply bg-dark text-white;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .gradient-bg {
+    background: linear-gradient(-45deg, #2E235E, #D4AF37, #FB6962, #2E235E);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+  }
+
+  .glass {
+    background: rgba(26, 26, 46, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+  }
+
+  .btn-primary {
+    @apply bg-gold text-dark font-bold py-3 px-6 rounded-lg hover:bg-opacity-90 transition-all duration-200;
+  }
+
+  .btn-secondary {
+    @apply border border-gold text-gold font-bold py-3 px-6 rounded-lg hover:bg-gold hover:text-dark transition-all duration-200;
+  }
+
+  .input-field {
+    @apply w-full bg-card border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent;
+  }
+
+  .chat-bubble {
+    @apply max-w-[70%] rounded-2xl px-4 py-3 break-words;
+  }
+
+  .chat-bubble-own {
+    @apply bg-primary text-white ml-auto;
+  }
+
+  .chat-bubble-other {
+    @apply bg-card text-gray-200;
+  }
+}
+
+@keyframes gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
