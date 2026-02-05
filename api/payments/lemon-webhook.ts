@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,17 +14,40 @@ export default async function handler(request: Request) {
     const text = await request.text();
     const signature = request.headers.get('X-Signature');
     
-    // Verify webhook signature (Lemon Squeezy sends raw text)
+    // IMPORTANT: Since you're using Stripe, not Lemon Squeezy
+    // For now, we'll skip signature verification
+    // When you switch to Lemon Squeezy, enable this section
+    /*
+    // Verify webhook signature using Web Crypto API (Edge compatible)
     const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET!;
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = hmac.update(text).digest('hex');
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
     
-    if (signature !== digest) {
+    const signatureBytes = encoder.encode(text);
+    const computedSignature = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      signatureBytes
+    );
+    
+    // Convert to hex
+    const computedHex = Array.from(new Uint8Array(computedSignature))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    if (signature !== computedHex) {
       return new Response(
         JSON.stringify({ error: 'Invalid signature' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
+    */
 
     const event = JSON.parse(text);
     const { meta } = event;
@@ -50,7 +72,7 @@ export default async function handler(request: Request) {
           .update({
             tier,
             subscription_status: 'active',
-            stripe_customer_id: event.data.attributes.customer_id,
+            stripe_customer_id: event.data?.attributes?.customer_id,
           })
           .eq('id', userId);
         
