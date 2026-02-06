@@ -1,4 +1,4 @@
-// app/src/components/ChatInterface.tsx - UPDATED
+// app/src/components/ChatInterface.tsx
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -9,6 +9,7 @@ import { trackAnalytics } from '@/lib/supabase/auth';
 import MessageBubble from './MessageBubble';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 
 interface ChatInterfaceProps {
   sessionId: string;
@@ -23,6 +24,7 @@ export default function ChatInterface({
   isGuest = false, 
   guestId 
 }: ChatInterfaceProps) {
+  const router = useRouter();
   const { messages, session, sendMessage, endSession } = useChat(sessionId);
   const { user } = useAuth();
   const [input, setInput] = useState('');
@@ -186,7 +188,7 @@ export default function ChatInterface({
     }
   };
 
-  // Get partner info
+  // Get partner info - FIXED VERSION
   const getPartner = () => {
     if (!session || !user) return null;
     
@@ -198,7 +200,10 @@ export default function ChatInterface({
     return {
       id: partnerId,
       username: partnerName || 'Anonymous',
-      isGuest: session.user1_id === user.id ? session.is_guest2 : session.is_guest1
+      // FIX: Use optional chaining with default value
+      isGuest: session.user1_id === user.id 
+        ? session.is_guest2 || false 
+        : session.is_guest1 || false
     };
   };
 
@@ -368,10 +373,3 @@ export default function ChatInterface({
     </div>
   );
 }
-
-// Add router
-import { useRouter } from 'next/navigation';
-
-// Update the component to include router
-// In the function component, add:
-// const router = useRouter();
