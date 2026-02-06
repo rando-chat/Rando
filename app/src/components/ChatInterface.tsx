@@ -1,3 +1,6 @@
+// app/src/components/ChatInterface.tsx
+'use client';
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,9 +12,16 @@ import toast from 'react-hot-toast';
 interface ChatInterfaceProps {
   sessionId: string;
   onEndSession: () => void;
+  isGuest?: boolean;
+  guestId?: string;
 }
 
-export default function ChatInterface({ sessionId, onEndSession }: ChatInterfaceProps) {
+export default function ChatInterface({ 
+  sessionId, 
+  onEndSession, 
+  isGuest = false, 
+  guestId = 'Guest' 
+}: ChatInterfaceProps) {
   const { messages, session, sendMessage, endSession } = useChat(sessionId);
   const { user } = useAuth();
   const [input, setInput] = useState('');
@@ -38,10 +48,24 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
     if (!result.success) {
       toast.error(result.error || 'Failed to send message');
       setInput(trimmedInput);
+    } else {
+      // Track guest messages differently
+      if (isGuest) {
+        trackAnalytics('guest_message_sent', {
+          sessionId,
+          length: trimmedInput.length,
+          guestId: guestId?.slice(0, 8)
+        });
+      }
     }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isGuest) {
+      toast.error('Guests cannot send images. Create an account for full features.');
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
@@ -89,6 +113,14 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
     if (result.success) {
       toast.success('Chat ended');
       onEndSession();
+      
+      if (isGuest) {
+        trackAnalytics('guest_session_ended', {
+          sessionId,
+          messageCount: messages.length,
+          guestId: guestId?.slice(0, 8)
+        });
+      }
     } else {
       toast.error(result.error || 'Failed to end chat');
     }
@@ -100,6 +132,8 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
   };
 
   const partner = getPartner();
+  const displayName = isGuest ? 'Anonymous' : (partner?.username || 'Anonymous');
+  const currentUsername = isGuest ? `Guest_${guestId?.slice(-4)}` : (user?.username || 'You');
 
   return (
     <div className="flex flex-col h-screen">
@@ -107,36 +141,64 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
       <div className="glass border-b border-gray-800 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary to-gold flex items-center justify-center">
               <span className="text-white font-bold">
-                {partner?.username?.[0]?.toUpperCase() || '?'}
+                {displayName?.[0]?.toUpperCase() || '?'}
               </span>
             </div>
             <div>
-              <h3 className="font-bold">{partner?.username || 'Anonymous'}</h3>
+              <h3 className="font-bold">{displayName}</h3>
               <p className="text-sm text-gray-400">
-                {session?.started_at ? `Chat started ${new Date(session.started_at).toLocaleTimeString()}` : 'Connecting...'}
+                {isGuest ? 'Anonymous chat • Messages not saved' : 'Connected'}
+                {session?.started_at && ` • ${new Date(session.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
               </p>
             </div>
           </div>
-          <button
-            onClick={handleEndChat}
-            className="btn-secondary text-sm px-4 py-2"
-          >
-            End Chat
-          </button>
+          <div className="flex items-center space-x-2">
+            {isGuest && (
+              <span className="px-2 py-1 bg-gradient-to-r from-primary to-gold text-dark text-xs rounded-full font-bold">
+                GUEST
+              </span>
+            )}
+            <button
+              onClick={handleEndChat}
+              className="btn-secondary text-sm px-4 py-2"
+            >
+              End Chat
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            isOwn={message.sender_id === user?.id}
-          />
-        ))}
+        {messages.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-4xl mb-4">👋</div>
+            <h3 className="text-xl font-bold mb-2">Chat Started!</h3>
+            <p className="text-gray-400">
+              {isGuest 
+                ? 'Say hello! This chat is anonymous and messages are not saved.'
+                : 'Say hello to start the conversation!'}
+            </p>
+            {isGuest && (
+              <div className="mt-4 p-3 bg-card rounded-lg">
+                <p className="text-sm text-warning">
+                  ⚠️ Guest mode: Create an account to save conversations and unlock all features
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+              isOwn={message.sender_id === user?.id || isGuest}
+              displayName={isGuest ? (message.sender_id === user?.id ? 'You' : 'Stranger') : undefined}
+            />
+          ))
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -154,13 +216,19 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || user?.tier === 'free'}
+            disabled={uploading || isGuest || user?.tier === 'free'}
             className={`px-4 py-3 rounded-lg border ${
-              user?.tier === 'free'
+              isGuest
+                ? 'border-gray-600 text-gray-500 cursor-not-allowed'
+                : user?.tier === 'free'
                 ? 'border-gray-600 text-gray-500 cursor-not-allowed'
                 : 'border-gold text-gold hover:bg-gold hover:text-dark'
             } transition-all duration-200`}
-            title={user?.tier === 'free' ? 'Upgrade to send images' : 'Send image'}
+            title={isGuest 
+              ? 'Guests cannot send images' 
+              : user?.tier === 'free' 
+                ? 'Upgrade to send images' 
+                : 'Send image'}
           >
             {uploading ? '📤 Uploading...' : '📸'}
           </button>
@@ -169,7 +237,7 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
+            placeholder={isGuest ? "Chat anonymously..." : "Type your message..."}
             className="input-field flex-1"
             onKeyPress={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -188,11 +256,30 @@ export default function ChatInterface({ sessionId, onEndSession }: ChatInterface
           </button>
         </form>
 
-        {user?.tier === 'free' && (
-          <p className="text-sm text-gray-400 mt-2 text-center">
-            💡 Upgrade to Premium or Student tier to send images
-          </p>
-        )}
+        <div className="mt-2 flex justify-between items-center">
+          {isGuest ? (
+            <p className="text-sm text-gray-400">
+              💬 Guest chat • Messages not saved
+            </p>
+          ) : user?.tier === 'free' ? (
+            <p className="text-sm text-gray-400">
+              💡 Upgrade to Premium or Student tier to send images
+            </p>
+          ) : (
+            <p className="text-sm text-gray-400">
+              Press Enter to send • Shift+Enter for new line
+            </p>
+          )}
+          
+          {isGuest && (
+            <button
+              onClick={() => window.location.href = '/'}
+              className="text-xs text-gold hover:text-gold/80"
+            >
+              Create account →
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
