@@ -1,4 +1,8 @@
+// app/src/pages/ChatPage.tsx
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth } from '@/hooks/useAuth';
 import ChatInterface from '@/components/ChatInterface';
@@ -9,6 +13,7 @@ import { trackAnalytics } from '@/lib/supabase/auth';
 import toast from 'react-hot-toast';
 
 export default function ChatPage() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const [currentSession, setCurrentSession] = useState<string | null>(null);
   const [showVerification, setShowVerification] = useState(false);
@@ -57,13 +62,17 @@ export default function ChatPage() {
       channelRef.current.unsubscribe();
       channelRef.current = null;
     }
-    
+
     await signOut();
-    window.location.href = '/';
+    router.push('/');
+  };
+
+  const goToProfile = () => {
+    router.push('/profile');
   };
 
   if (!user) {
-    window.location.href = '/';
+    router.push('/');
     return null;
   }
 
@@ -99,7 +108,7 @@ export default function ChatPage() {
               <div className="text-xs text-gray-400">{user.tier} tier</div>
             </div>
             <button
-              onClick={() => window.location.href = '/profile'}
+              onClick={goToProfile}
               className="w-10 h-10 rounded-full bg-card flex items-center justify-center hover:bg-gray-800 transition-colors"
               title="Profile"
             >
@@ -137,15 +146,24 @@ export default function ChatPage() {
             <span>👮 Content moderated</span>
           </p>
           <div className="mt-3 flex justify-center space-x-6">
-            <a href="#" className="hover:text-gold" onClick={() => toast.success('Report system active')}>
+            <button
+              className="hover:text-gold"
+              onClick={() => toast.success('Report system active')}
+            >
               Report User
-            </a>
-            <a href="#" className="hover:text-gold" onClick={() => toast.success('Safety guide coming soon')}>
+            </button>
+            <button
+              className="hover:text-gold"
+              onClick={() => toast.success('Safety guide coming soon')}
+            >
               Safety Guide
-            </a>
-            <a href="#" className="hover:text-gold" onClick={() => toast.success('Contact form coming soon')}>
+            </button>
+            <button
+              className="hover:text-gold"
+              onClick={() => toast.success('Contact form coming soon')}
+            >
               Contact Support
-            </a>
+            </button>
           </div>
         </div>
       </div>
