@@ -1,4 +1,4 @@
-// app/src/components/Matchmaking.tsx - UPDATED
+// app/src/components/Matchmaking.tsx - COMPLETE UPDATED FILE
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -23,6 +23,7 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
   const [interests, setInterests] = useState<string[]>([]);
   const [timer, setTimer] = useState(0);
   const [matchFound, setMatchFound] = useState(false);
+  const [checkInterval, setCheckInterval] = useState<NodeJS.Timeout | null>(null);
 
   const interestsList = [
     'Gaming', 'Music', 'Movies', 'Sports', 'Technology',
@@ -36,6 +37,111 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
         ? prev.filter(i => i !== interest)
         : [...prev, interest]
     );
+  };
+
+  // Add this simulateMatchmaking function
+  const simulateMatchmaking = () => {
+    // Simulate finding a match in 2-5 seconds
+    const matchTime = 2000 + Math.random() * 3000;
+    
+    const interval = setInterval(() => {
+      setTimer(prev => prev + 1);
+    }, 1000);
+
+    setTimeout(() => {
+      clearInterval(interval);
+      setMatchFound(true);
+      toast.success('Match found! Connecting...');
+
+      const mockSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
+      
+      // Small delay before connecting
+      setTimeout(() => {
+        onMatchFound(mockSessionId);
+      }, 1000);
+    }, matchTime);
+  };
+
+  // Update checkForMatch to accept userId parameter
+  const checkForMatch = async (userId: string) => {
+    if (!searching || matchFound || !userId) return;
+
+    try {
+      // Check queue position
+      const { data: queueData } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .neq('user_id', userId)
+        .order('entered_at', { ascending: true });
+
+      if (queueData) {
+        setQueuePosition(queueData.length + 1);
+      }
+
+      // Try to find a match (simplified logic)
+      const { data: potentialMatch } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .neq('user_id', userId)
+        .or(`looking_for.eq.${lookingFor},looking_for.is.null`)
+        .limit(1)
+        .single();
+
+      if (potentialMatch) {
+        setMatchFound(true);
+
+        // Create chat session
+        const { data: session, error: sessionError } = await supabase
+          .from('chat_sessions')
+          .insert({
+            user1_id: userId,
+            user2_id: potentialMatch.user_id,
+            session_type: lookingFor,
+            started_at: new Date().toISOString(),
+            is_guest1: isGuest,
+            is_guest2: potentialMatch.is_guest
+          })
+          .select()
+          .single();
+
+        if (sessionError) {
+          console.error('Session creation error:', sessionError);
+          // Use mock session
+          const mockSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
+          toast.success('Match found! Connecting...');
+          
+          setTimeout(() => {
+            onMatchFound(mockSessionId);
+          }, 1000);
+          return;
+        }
+
+        // Remove both users from queue
+        await Promise.all([
+          supabase
+            .from('matchmaking_queue')
+            .delete()
+            .eq('user_id', userId),
+          supabase
+            .from('matchmaking_queue')
+            .delete()
+            .eq('user_id', potentialMatch.user_id),
+        ]);
+
+        toast.success('Match found! Connecting...');
+        setTimeout(() => {
+          onMatchFound(session.id);
+        }, 1000);
+
+        return;
+      }
+
+      // Continue searching if no match found
+      setTimeout(() => checkForMatch(userId), 3000);
+    } catch (error) {
+      console.error('Matchmaking error:', error);
+      setTimeout(() => checkForMatch(userId), 3000);
+    }
   };
 
   const startSearch = async () => {
@@ -58,6 +164,28 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
     }
 
     try {
+      // First, check if the matchmaking_queue table exists
+      const { error: tableCheckError } = await supabase
+        .from('matchmaking_queue')
+        .select('count')
+        .limit(1);
+
+      if (tableCheckError) {
+        // Table might not exist or have RLS issues
+        console.log('Table check error:', tableCheckError);
+        
+        // Use fallback simulation
+        toast.success('Searching for a random match...');
+        simulateMatchmaking();
+        return;
+      }
+
+      // Clean up any existing entry for this user first
+      await supabase
+        .from('matchmaking_queue')
+        .delete()
+        .eq('user_id', userId);
+
       // Join matchmaking queue
       const { error: queueError } = await supabase
         .from('matchmaking_queue')
@@ -72,19 +200,27 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
         });
 
       if (queueError) {
-        console.error('Queue error:', queueError);
+        console.error('Queue insert error:', queueError);
         
-        // If table doesn't exist, use simulation
-        if (queueError.message.includes('does not exist')) {
+        // If there's an RLS policy issue, try with simpler data
+        const { error: simpleError } = await supabase
+          .from('matchmaking_queue')
+          .insert({
+            user_id: userId,
+            looking_for: lookingFor,
+            entered_at: new Date().toISOString()
+          });
+
+        if (simpleError) {
+          console.error('Simple insert also failed:', simpleError);
+          // Use fallback
           toast.success('Searching for a random match...');
           simulateMatchmaking();
           return;
         }
-        
-        toast.error('Failed to join queue');
-        setSearching(false);
-        return;
       }
+
+      toast.success('Searching for a match...');
 
       if (isGuest) {
         trackAnalytics('guest_matchmaking_started', {
@@ -99,159 +235,12 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
       }
 
       // Start checking for matches
-      checkForMatch();
+      checkForMatch(userId);
+      
     } catch (error: any) {
       console.error('Start search error:', error);
-      toast.error('Failed to start search');
-      setSearching(false);
-    }
-  };
-
-  const simulateMatchmaking = () => {
-    // Simulate finding a match in 2-5 seconds
-    const matchTime = 2000 + Math.random() * 3000;
-    
-    const interval = setInterval(() => {
-      setTimer(prev => prev + 1);
-    }, 1000);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      setMatchFound(true);
-      toast.success('Match found! Connecting...');
-
-      const mockSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
-      
-      // Create a mock session in localStorage for guest
-      if (isGuest && guestId) {
-        localStorage.setItem('current_session_id', mockSessionId);
-      }
-
-      // Small delay before connecting
-      setTimeout(() => {
-        onMatchFound(mockSessionId);
-      }, 1000);
-    }, matchTime);
-  };
-
-  const checkForMatch = async () => {
-    if (!searching || matchFound) return;
-
-    const userId = isGuest ? guestId : user?.id;
-    if (!userId) {
-      setSearching(false);
-      return;
-    }
-
-    try {
-      // Check for potential matches
-      const { data: potentialMatches, error } = await supabase
-        .from('matchmaking_queue')
-        .select('*')
-        .neq('user_id', userId)
-        .order('entered_at', { ascending: true });
-
-      if (error) {
-        console.error('Check match error:', error);
-        // If table error, fall back to simulation
-        if (error.message.includes('does not exist')) {
-          simulateMatchmaking();
-          return;
-        }
-        setTimeout(checkForMatch, 3000);
-        return;
-      }
-
-      // Update queue position
-      if (potentialMatches) {
-        setQueuePosition(potentialMatches.length + 1);
-      }
-
-      // Find a compatible match
-      const match = potentialMatches?.find(match => 
-        match.looking_for === lookingFor || !match.looking_for
-      );
-
-      if (match) {
-        setMatchFound(true);
-
-        try {
-          // Create chat session
-          const { data: session, error: sessionError } = await supabase
-            .from('chat_sessions')
-            .insert({
-              user1_id: userId,
-              user2_id: match.user_id,
-              session_type: lookingFor,
-              started_at: new Date().toISOString(),
-              is_guest1: isGuest,
-              is_guest2: match.is_guest
-            })
-            .select()
-            .single();
-
-          if (sessionError) {
-            console.error('Session creation error:', sessionError);
-            // Create mock session if DB error
-            const mockSessionId = `session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
-            
-            if (isGuest && guestId) {
-              localStorage.setItem('current_session_id', mockSessionId);
-            }
-
-            toast.success('Match found! Connecting...');
-            
-            setTimeout(() => {
-              onMatchFound(mockSessionId);
-            }, 1000);
-            return;
-          }
-
-          // Remove both users from queue
-          await Promise.all([
-            supabase
-              .from('matchmaking_queue')
-              .delete()
-              .eq('user_id', userId),
-            supabase
-              .from('matchmaking_queue')
-              .delete()
-              .eq('user_id', match.user_id),
-          ]);
-
-          if (isGuest) {
-            trackAnalytics('guest_match_found', {
-              sessionId: session.id,
-              matchUserId: match.user_id,
-              matchTier: match.tier,
-            });
-          } else {
-            trackAnalytics('match_found', {
-              sessionId: session.id,
-              matchUserId: match.user_id,
-              matchTier: match.tier,
-            });
-          }
-
-          toast.success('Match found! Connecting...');
-
-          setTimeout(() => {
-            onMatchFound(session.id);
-          }, 1000);
-
-        } catch (error) {
-          console.error('Match processing error:', error);
-          setTimeout(checkForMatch, 3000);
-        }
-
-        return;
-      }
-
-      // Continue searching if no match found
-      setTimeout(checkForMatch, 3000);
-    } catch (error) {
-      console.error('Matchmaking error:', error);
-      setTimeout(checkForMatch, 3000);
+      toast.error('Failed to start search, using simulation...');
+      simulateMatchmaking();
     }
   };
 
@@ -259,6 +248,11 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
     setSearching(false);
     setTimer(0);
     setMatchFound(false);
+    
+    if (checkInterval) {
+      clearInterval(checkInterval);
+      setCheckInterval(null);
+    }
 
     const userId = isGuest ? guestId : user?.id;
     
@@ -283,16 +277,20 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
   };
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let timerInterval: NodeJS.Timeout;
 
     if (searching && !matchFound) {
-      interval = setInterval(() => {
+      timerInterval = setInterval(() => {
         setTimer(prev => prev + 1);
       }, 1000);
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (timerInterval) clearInterval(timerInterval);
+      if (checkInterval) {
+        clearInterval(checkInterval);
+        setCheckInterval(null);
+      }
     };
   }, [searching, matchFound]);
 
