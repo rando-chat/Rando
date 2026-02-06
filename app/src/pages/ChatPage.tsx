@@ -1,4 +1,4 @@
-// app/src/pages/ChatPage.tsx
+// app/src/pages/ChatPage.tsx - UPDATED
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
