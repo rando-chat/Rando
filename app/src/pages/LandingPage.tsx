@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase/client';
 import { signIn, signUp } from '@/lib/supabase/auth';
 import toast from 'react-hot-toast';
 
@@ -18,8 +19,37 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
 
   // Quick anonymous chat
-  const handleQuickChat = () => {
-    router.push('/chat/guest');
+  const handleQuickChat = async () => {
+    setLoading(true);
+    try {
+      // Generate guest ID
+      const guestId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const guestUsername = `Guest_${Math.random().toString(36).substr(2, 6)}`;
+      
+      // Store in localStorage
+      localStorage.setItem('rando_guest_id', guestId);
+      localStorage.setItem('rando_guest_username', guestUsername);
+      
+      // Try to save in database (optional)
+      try {
+        await supabase.from('guest_sessions').insert({
+          id: guestId,
+          username: guestUsername,
+          created_at: new Date().toISOString(),
+          last_active: new Date().toISOString()
+        });
+      } catch (dbError) {
+        console.log('Guest session not saved to DB, using localStorage only');
+      }
+      
+      toast.success('Starting anonymous chat...');
+      router.push('/chat');
+    } catch (error) {
+      toast.error('Failed to start chat');
+      console.error('Guest chat error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAuth = async (e: React.FormEvent) => {
