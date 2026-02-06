@@ -1,4 +1,4 @@
-// app/src/components/Matchmaking.tsx - SIMPLE DIRECT MATCHING
+// app/src/components/Matchmaking.tsx - UPDATED FOR NEW TABLE
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -22,6 +22,7 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
   const [interests, setInterests] = useState<string[]>([]);
   const [timer, setTimer] = useState(0);
   const [matchFound, setMatchFound] = useState(false);
+  const [checkingForMatch, setCheckingForMatch] = useState(false);
 
   const interestsList = [
     'Gaming', 'Music', 'Movies', 'Sports', 'Technology',
@@ -37,7 +38,6 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
     );
   };
 
-  // SIMPLE DIRECT MATCHING FUNCTION
   const startSearch = async () => {
     if (!user && !isGuest) {
       toast.error('Please start a chat session first');
@@ -47,6 +47,7 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
     setSearching(true);
     setTimer(0);
     setMatchFound(false);
+    setCheckingForMatch(true);
 
     const userId = isGuest ? guestId : user?.id;
     const username = isGuest ? `Guest_${guestId?.slice(-4) || 'User'}` : user?.username || 'User';
@@ -54,136 +55,237 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
     if (!userId) {
       toast.error('Unable to start search');
       setSearching(false);
+      setCheckingForMatch(false);
       return;
     }
 
-    toast.success('🔍 Searching for someone...');
-
-    // Start timer
-    const timerInterval = setInterval(() => {
-      setTimer(prev => prev + 1);
-    }, 1000);
+    toast.success('🔍 Searching for someone to chat with...');
 
     try {
-      // SIMPLE APPROACH: Create a waiting room in localStorage
-      const waitingRoomKey = 'rando_waiting_room';
-      const currentTime = Date.now();
-      
-      // Check if someone else is waiting
-      const waitingUser = localStorage.getItem(waitingRoomKey);
-      
-      if (waitingUser) {
-        // Someone is waiting! Parse their data
-        const { waitingUserId, waitingUsername, waitingTime, waitingLookingFor } = JSON.parse(waitingUser);
-        
-        // Check if it's not the same user (prevent self-match)
-        if (waitingUserId !== userId && waitingLookingFor === lookingFor) {
-          clearInterval(timerInterval);
-          setMatchFound(true);
-          
-          // Remove from waiting room
-          localStorage.removeItem(waitingRoomKey);
-          
-          // Create chat session
-          const sessionId = `session_${currentTime}_${Math.random().toString(36).slice(-6)}`;
-          
-          // Save to database if possible
-          try {
-            const { error: sessionError } = await supabase
-              .from('chat_sessions')
-              .insert({
-                id: sessionId,
-                user1_id: waitingUserId,
-                user2_id: userId,
-                session_type: lookingFor,
-                started_at: new Date().toISOString(),
-                is_guest1: waitingUserId.startsWith('guest_'),
-                is_guest2: isGuest
-              });
+      // 1. Check if someone is already waiting
+      const { data: waitingUsers, error: fetchError } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .neq('user_id', userId)
+        .eq('looking_for', lookingFor)
+        .eq('matched', false)
+        .order('created_at', { ascending: true })
+        .limit(1);
 
-            if (sessionError) {
-              console.log('Session save failed, using local:', sessionError);
-            }
-          } catch (dbError) {
-            console.log('Database error, continuing locally:', dbError);
-          }
-
-          toast.success(`✅ Matched with ${waitingUsername}!`);
-          
-          // Short delay for UX
-          setTimeout(() => {
-            onMatchFound(sessionId);
-          }, 1500);
-          
-          return;
-        }
+      if (fetchError) {
+        console.error('Error checking queue:', fetchError);
+        // Continue anyway - maybe no one is waiting yet
       }
 
-      // No one waiting, so join the waiting room
-      localStorage.setItem(waitingRoomKey, JSON.stringify({
-        waitingUserId: userId,
-        waitingUsername: username,
-        waitingTime: currentTime,
-        waitingLookingFor: lookingFor,
-        waitingInterests: interests
-      }));
+      if (waitingUsers && waitingUsers.length > 0) {
+        // Found someone waiting! Create match
+        const match = waitingUsers[0];
+        await createMatch(userId, username, match);
+        return;
+      }
 
-      // Set timeout to clear old waiting room (5 minutes)
-      setTimeout(() => {
-        const currentWaiting = localStorage.getItem(waitingRoomKey);
-        if (currentWaiting) {
-          const { waitingUserId } = JSON.parse(currentWaiting);
-          if (waitingUserId === userId) {
-            localStorage.removeItem(waitingRoomKey);
-          }
-        }
-      }, 5 * 60 * 1000);
+      // 2. No one waiting, so join the queue
+      await joinQueue(userId, username);
 
-      // Poll for a match every 2 seconds
-      const pollInterval = setInterval(() => {
-        // Check if we've been matched (someone else found us)
-        const checkWaiting = localStorage.getItem(waitingRoomKey);
-        if (!checkWaiting) {
-          // We've been matched!
-          clearInterval(pollInterval);
-          clearInterval(timerInterval);
-          setMatchFound(true);
-          
-          const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
-          
-          toast.success('✅ Someone found you! Connecting...');
-          
-          setTimeout(() => {
-            onMatchFound(sessionId);
-          }, 1500);
-        }
-      }, 2000);
-
-      // Set timeout to stop searching after 30 seconds
-      setTimeout(() => {
-        if (!matchFound) {
-          clearInterval(pollInterval);
-          clearInterval(timerInterval);
-          localStorage.removeItem(waitingRoomKey);
-          toast.error('No match found. Try again!');
-          setSearching(false);
-        }
-      }, 30000);
+      // 3. Wait for someone to match with us
+      waitForMatch(userId, username);
 
     } catch (error) {
-      console.error('Matchmaking error:', error);
-      toast.error('Error searching');
+      console.error('Search error:', error);
+      toast.error('Failed to start search');
       setSearching(false);
+      setCheckingForMatch(false);
     }
   };
 
-  const stopSearch = () => {
+  const joinQueue = async (userId: string, username: string) => {
+    try {
+      // Remove any existing entry
+      await supabase
+        .from('matchmaking_queue')
+        .delete()
+        .eq('user_id', userId);
+
+      // Add to queue
+      const { error } = await supabase
+        .from('matchmaking_queue')
+        .insert({
+          user_id: userId,
+          username: username,
+          looking_for: lookingFor,
+          interests: interests.length > 0 ? interests : null,
+          is_guest: isGuest,
+          tier: isGuest ? 'guest' : user?.tier || 'free',
+          matched: false,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+    } catch (error) {
+      console.error('Join queue error:', error);
+      throw error;
+    }
+  };
+
+  const waitForMatch = (userId: string, username: string) => {
+    let pollCount = 0;
+    const maxPolls = 45; // 45 seconds max
+    
+    const pollInterval = setInterval(async () => {
+      if (!searching || matchFound || pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+        if (pollCount >= maxPolls && !matchFound) {
+          toast.error('No match found. Try again!');
+          await leaveQueue(userId);
+          setSearching(false);
+          setCheckingForMatch(false);
+        }
+        return;
+      }
+
+      pollCount++;
+      setTimer(pollCount);
+
+      try {
+        // Check our queue status
+        const { data: queueData, error } = await supabase
+          .from('matchmaking_queue')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+
+        if (error || !queueData) {
+          // We've been matched or removed!
+          clearInterval(pollInterval);
+          setMatchFound(true);
+          
+          // Create session (other user should have created it)
+          const sessionId = `chat_${Date.now()}_${userId.slice(-6)}`;
+          toast.success('✅ Match found! Connecting...');
+          
+          setTimeout(() => {
+            onMatchFound(sessionId);
+          }, 1500);
+          return;
+        }
+
+        if (queueData.matched && queueData.session_id) {
+          // We've been officially matched
+          clearInterval(pollInterval);
+          await completeMatch(queueData.session_id);
+        }
+
+      } catch (error) {
+        console.error('Poll error:', error);
+      }
+    }, 1000);
+  };
+
+  const createMatch = async (userId: string, username: string, match: any) => {
+    try {
+      setMatchFound(true);
+      setCheckingForMatch(false);
+
+      // Create session ID
+      const sessionId = `chat_${Date.now()}_${Math.random().toString(36).slice(-8)}`;
+      
+      // Mark both users as matched
+      await Promise.all([
+        supabase
+          .from('matchmaking_queue')
+          .update({ 
+            matched: true,
+            matched_with: userId,
+            session_id: sessionId
+          })
+          .eq('user_id', match.user_id),
+        supabase
+          .from('matchmaking_queue')
+          .delete()
+          .eq('user_id', userId)
+      ]);
+
+      // Create chat session
+      const { error: sessionError } = await supabase
+        .from('chat_sessions')
+        .insert({
+          id: sessionId,
+          user1_id: match.user_id,
+          user2_id: userId,
+          session_type: lookingFor,
+          started_at: new Date().toISOString(),
+          is_guest1: match.is_guest,
+          is_guest2: isGuest,
+          total_messages: 0
+        });
+
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        // Continue anyway
+      }
+
+      toast.success(`✅ Matched with ${match.username || 'someone'}!`);
+      
+      if (isGuest) {
+        trackAnalytics('guest_match_found', { sessionId });
+      } else {
+        trackAnalytics('match_found', { sessionId });
+      }
+
+      setTimeout(() => {
+        onMatchFound(sessionId);
+      }, 1500);
+
+    } catch (error) {
+      console.error('Create match error:', error);
+      toast.error('Failed to create match');
+      setSearching(false);
+      setCheckingForMatch(false);
+    }
+  };
+
+  const completeMatch = async (sessionId: string) => {
+    try {
+      setMatchFound(true);
+      setCheckingForMatch(false);
+
+      toast.success('✅ Someone found you! Connecting...');
+      
+      setTimeout(() => {
+        onMatchFound(sessionId);
+      }, 1500);
+
+    } catch (error) {
+      console.error('Complete match error:', error);
+      toast.error('Failed to connect');
+      setSearching(false);
+      setCheckingForMatch(false);
+    }
+  };
+
+  const leaveQueue = async (userId: string) => {
+    try {
+      await supabase
+        .from('matchmaking_queue')
+        .delete()
+        .eq('user_id', userId);
+    } catch (error) {
+      console.error('Leave queue error:', error);
+    }
+  };
+
+  const stopSearch = async () => {
+    const userId = isGuest ? guestId : user?.id;
+    
+    if (userId) {
+      await leaveQueue(userId);
+    }
+
     setSearching(false);
     setTimer(0);
     setMatchFound(false);
-    
-    // Remove from waiting room
-    localStorage.removeItem('rando_waiting_room');
+    setCheckingForMatch(false);
     
     toast('Search stopped');
   };
@@ -218,26 +320,6 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
           ? 'Chat with random people. No account needed.'
           : 'Meet interesting people from around the world'}
       </p>
-
-      {isGuest && (
-        <div className="mb-6 p-4 bg-gradient-to-r from-primary/20 to-gold/20 rounded-xl border border-gold/30">
-          <div className="flex items-center justify-center space-x-2 mb-2">
-            <span className="text-2xl">🎭</span>
-            <span className="font-bold text-gold">Guest Mode</span>
-          </div>
-          <p className="text-sm text-center text-gray-300">
-            Chat anonymously • No sign up required • Messages not saved
-          </p>
-          <div className="text-center mt-2">
-            <button
-              onClick={() => router.push('/')}
-              className="text-sm text-gold hover:text-gold/80 underline"
-            >
-              Create free account for more features
-            </button>
-          </div>
-        </div>
-      )}
 
       {!searching ? (
         <>
@@ -326,7 +408,7 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
                 </div>
                 <div>
                   <div className="text-3xl font-bold mb-2">
-                    {timer < 5 ? 'Quick match' : 'Still searching'}
+                    {checkingForMatch ? 'Active search' : 'Waiting...'}
                   </div>
                   <p className="text-gray-400">Status</p>
                 </div>
@@ -335,7 +417,7 @@ export default function Matchmaking({ onMatchFound, isGuest = false, guestId }: 
               <div className="w-full bg-gray-800 rounded-full h-2 mb-4">
                 <div
                   className="bg-gradient-to-r from-primary to-gold h-2 rounded-full transition-all duration-1000"
-                  style={{ width: `${Math.min(timer * 3, 100)}%` }}
+                  style={{ width: `${Math.min(timer * 2, 100)}%` }}
                 ></div>
               </div>
 
