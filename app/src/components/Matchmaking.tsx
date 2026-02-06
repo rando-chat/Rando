@@ -1,3 +1,6 @@
+// app/src/components/Matchmaking.tsx
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,15 +9,17 @@ import toast from 'react-hot-toast';
 
 interface MatchmakingProps {
   onMatchFound: (sessionId: string) => void;
+  isGuest?: boolean;
 }
 
-export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
+export default function Matchmaking({ onMatchFound, isGuest = false }: MatchmakingProps) {
   const { user } = useAuth();
   const [searching, setSearching] = useState(false);
   const [queuePosition, setQueuePosition] = useState(0);
   const [lookingFor, setLookingFor] = useState<'text' | 'video'>('text');
   const [interests, setInterests] = useState<string[]>([]);
   const [timer, setTimer] = useState(0);
+  const [matchFound, setMatchFound] = useState(false);
 
   const interestsList = [
     'Gaming', 'Music', 'Movies', 'Sports', 'Technology',
@@ -31,6 +36,36 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
   };
 
   const startSearch = async () => {
+    if (isGuest) {
+      // Guest matchmaking (simulated)
+      setSearching(true);
+      setTimer(0);
+      setMatchFound(false);
+      
+      toast.success('Searching for a random match...');
+      
+      await trackAnalytics('guest_matchmaking_started', {
+        lookingFor,
+        interestsCount: interests.length,
+      });
+
+      // Simulate finding a match in 2-5 seconds
+      const matchTime = 2000 + Math.random() * 3000;
+      setTimeout(() => {
+        const mockSessionId = `guest_session_${Date.now()}_${Math.random().toString(36).slice(-6)}`;
+        setMatchFound(true);
+        toast.success('Match found! Connecting...');
+        
+        // Small delay before redirecting to chat
+        setTimeout(() => {
+          onMatchFound(mockSessionId);
+        }, 1000);
+      }, matchTime);
+
+      return;
+    }
+
+    // Authenticated user matchmaking
     if (!user) {
       toast.error('Please sign in first');
       return;
@@ -38,6 +73,7 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
 
     setSearching(true);
     setTimer(0);
+    setMatchFound(false);
 
     // Join matchmaking queue
     const { error: queueError } = await supabase
@@ -48,9 +84,7 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
         interests,
         looking_for: lookingFor,
         entered_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      });
 
     if (queueError) {
       console.error('Queue error:', queueError);
@@ -69,21 +103,24 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
   };
 
   const stopSearch = async () => {
-    if (!user) return;
-
     setSearching(false);
     setTimer(0);
+    setMatchFound(false);
 
-    await supabase
-      .from('matchmaking_queue')
-      .delete()
-      .eq('user_id', user.id);
+    if (!isGuest && user) {
+      await supabase
+        .from('matchmaking_queue')
+        .delete()
+        .eq('user_id', user.id);
 
-    await trackAnalytics('matchmaking_stopped', {});
+      await trackAnalytics('matchmaking_stopped', {});
+    }
+    
+    toast('Search stopped');
   };
 
   const checkForMatch = async () => {
-    if (!searching || !user) return;
+    if (!searching || !user || isGuest || matchFound) return;
 
     try {
       // Check queue position
@@ -107,6 +144,8 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
         .single();
 
       if (potentialMatch) {
+        setMatchFound(true);
+        
         // Create chat session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
@@ -139,8 +178,13 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
           matchTier: potentialMatch.user.tier,
         });
 
-        onMatchFound(session.id);
-        setSearching(false);
+        toast.success('Match found! Connecting...');
+        
+        // Small delay for better UX
+        setTimeout(() => {
+          onMatchFound(session.id);
+        }, 1000);
+        
         return;
       }
 
@@ -174,10 +218,34 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
 
   return (
     <div className="glass rounded-2xl p-8 max-w-2xl mx-auto">
-      <h2 className="text-3xl font-bold text-center mb-2">Find Someone to Chat With</h2>
+      <h2 className="text-3xl font-bold text-center mb-2">
+        {isGuest ? 'Anonymous Chat' : 'Find Someone to Chat With'}
+      </h2>
       <p className="text-gray-400 text-center mb-8">
-        Meet interesting people from around the world
+        {isGuest 
+          ? 'Chat with random people. No account needed.'
+          : 'Meet interesting people from around the world'}
       </p>
+
+      {isGuest && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-primary/20 to-gold/20 rounded-xl border border-gold/30">
+          <div className="flex items-center justify-center space-x-2 mb-2">
+            <span className="text-2xl">🎭</span>
+            <span className="font-bold text-gold">Guest Mode</span>
+          </div>
+          <p className="text-sm text-center text-gray-300">
+            Chat anonymously • No sign up required • Messages not saved
+          </p>
+          <div className="text-center mt-2">
+            <button
+              onClick={() => window.location.href = '/'}
+              className="text-sm text-gold hover:text-gold/80 underline"
+            >
+              Create free account for more features
+            </button>
+          </div>
+        </div>
+      )}
 
       {!searching ? (
         <>
@@ -196,7 +264,9 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
                 <div className="text-4xl mb-2">💬</div>
                 <h4 className="font-bold text-lg mb-2">Text Chat</h4>
                 <p className="text-gray-400 text-sm">
-                  Classic text-based conversation. Safe and anonymous.
+                  {isGuest 
+                    ? 'Anonymous text conversation'
+                    : 'Classic text-based conversation. Safe and anonymous.'}
                 </p>
               </button>
             </div>
@@ -231,41 +301,71 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
             onClick={startSearch}
             className="btn-primary w-full py-4 text-lg"
           >
-            Start Random Chat
+            {isGuest ? 'Start Anonymous Chat' : 'Start Random Chat'}
           </button>
+
+          {!isGuest && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => window.location.href = '/chat/guest'}
+                className="text-gold hover:text-gold/80 underline"
+              >
+                Or try anonymous guest chat
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <div className="text-center">
-          <div className="animate-pulse-slow text-6xl mb-6">🔍</div>
-          <h3 className="text-2xl font-bold mb-2">Looking for a match...</h3>
-          <p className="text-gray-400 mb-6">
-            Searching for someone with similar interests
-          </p>
+          <div className="animate-pulse-slow text-6xl mb-6">
+            {matchFound ? '✅' : '🔍'}
+          </div>
           
-          <div className="space-y-4 mb-8">
-            <div>
-              <div className="text-3xl font-bold text-gold mb-2">{formatTime(timer)}</div>
-              <p className="text-gray-400">Time searching</p>
-            </div>
-            <div>
-              <div className="text-3xl font-bold mb-2">#{queuePosition}</div>
-              <p className="text-gray-400">Position in queue</p>
-            </div>
-          </div>
+          {matchFound ? (
+            <>
+              <h3 className="text-2xl font-bold mb-2 text-gold">Match Found!</h3>
+              <p className="text-gray-400 mb-6">
+                Connecting you to a random person...
+              </p>
+              <div className="w-20 h-20 mx-auto mb-6 border-4 border-gold border-t-transparent rounded-full animate-spin"></div>
+            </>
+          ) : (
+            <>
+              <h3 className="text-2xl font-bold mb-2">Looking for a match...</h3>
+              <p className="text-gray-400 mb-6">
+                {isGuest 
+                  ? 'Finding someone random for you to chat with'
+                  : 'Searching for someone with similar interests'}
+              </p>
+              
+              <div className="space-y-4 mb-8">
+                <div>
+                  <div className="text-3xl font-bold text-gold mb-2">{formatTime(timer)}</div>
+                  <p className="text-gray-400">Time searching</p>
+                </div>
+                {!isGuest && (
+                  <div>
+                    <div className="text-3xl font-bold mb-2">#{queuePosition}</div>
+                    <p className="text-gray-400">Position in queue</p>
+                  </div>
+                )}
+              </div>
 
-          <div className="w-full bg-gray-800 rounded-full h-2 mb-4">
-            <div
-              className="bg-gradient-to-r from-primary to-gold h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${Math.min(timer * 2, 100)}%` }}
-            ></div>
-          </div>
+              <div className="w-full bg-gray-800 rounded-full h-2 mb-4">
+                <div
+                  className="bg-gradient-to-r from-primary to-gold h-2 rounded-full transition-all duration-1000"
+                  style={{ width: `${Math.min(timer * 2, 100)}%` }}
+                ></div>
+              </div>
 
-          <button
-            onClick={stopSearch}
-            className="btn-secondary w-full py-3"
-          >
-            Stop Searching
-          </button>
+              <button
+                onClick={stopSearch}
+                className="btn-secondary w-full py-3"
+              >
+                Stop Searching
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -277,11 +377,15 @@ export default function Matchmaking({ onMatchFound }: MatchmakingProps) {
           </div>
           <div>
             <div className="text-2xl font-bold text-gold">24/7</div>
-            <div className="text-gray-400 text-sm">Active Users</div>
+            <div className="text-gray-400 text-sm">Active</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-gold">∞</div>
-            <div className="text-gray-400 text-sm">Messages</div>
+            <div className="text-2xl font-bold text-gold">
+              {isGuest ? '∞' : 'Safe'}
+            </div>
+            <div className="text-gray-400 text-sm">
+              {isGuest ? 'Anonymous' : 'Moderated'}
+            </div>
           </div>
         </div>
       </div>
