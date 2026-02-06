@@ -59,7 +59,7 @@ export function useChat(sessionId?: string) {
 
       if (fetchError) throw fetchError;
       
-      // Transform session to ensure guest properties exist
+      // Transform session to ensure that guest properties exist
       const transformedSession: ChatSession = {
         ...data,
         is_guest1: data.is_guest1 || false,
