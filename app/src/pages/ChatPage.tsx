@@ -54,25 +54,20 @@ export default function ChatPage() {
 
     checkSession();
 
-    // Subscribe to online users only if authenticated
+    // Subscribe to online users
     const subscribeToUsers = async () => {
-      if (user) {
-        try {
-          const channel = await realtimeService.subscribeToOnlineUsers((userIds) => {
-            setOnlineUsers(userIds);
-            console.log('Online users updated:', userIds.length, 'users');
-          });
-          channelRef.current = channel;
-        } catch (error) {
-          console.error('Failed to subscribe to online users:', error);
-          // Fallback: show simulated count for guests
-          if (isGuest) {
-            setOnlineUsers(['guest_' + guestInfo.id]);
-          }
+      try {
+        const channel = await realtimeService.subscribeToOnlineUsers((userIds) => {
+          setOnlineUsers(userIds);
+          console.log('Online users updated:', userIds.length, 'users');
+        });
+        channelRef.current = channel;
+      } catch (error) {
+        console.error('Failed to subscribe to online users:', error);
+        // Fallback
+        if (isGuest) {
+          setOnlineUsers(['guest_' + guestInfo.id]);
         }
-      } else if (isGuest) {
-        // For guests, show simulated count
-        setOnlineUsers(['guest_' + guestInfo.id]);
       }
     };
 
