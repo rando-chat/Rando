@@ -191,12 +191,12 @@ export default function ChatInterface({
           </div>
         ) : (
           messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              isOwn={message.sender_id === user?.id || isGuest}
-              displayName={isGuest ? (message.sender_id === user?.id ? 'You' : 'Stranger') : undefined}
-            />
+<MessageBubble
+  key={message.id}
+  message={message}
+  isOwn={message.sender_id === user?.id || (isGuest && message.sender_id === 'guest')}
+  displayName={isGuest ? (message.sender_id === user?.id ? 'You' : 'Stranger') : undefined}
+/>
           ))
         )}
         <div ref={messagesEndRef} />
