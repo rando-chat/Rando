@@ -1,16 +1,27 @@
-import React, { useState } from 'react';
+// app/src/pages/LandingPage.tsx
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { signIn, signUp } from '@/lib/supabase/auth';
 import { trackAnalytics } from '@/lib/supabase/auth';
 import toast from 'react-hot-toast';
 
 export default function LandingPage() {
+  const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      router.push('/chat');
+    }
+  }, [user, router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +44,7 @@ export default function LandingPage() {
           email,
           method: 'email',
         });
+        // User will be redirected via useEffect above
       } else {
         throw new Error(result.error);
       }
@@ -53,8 +65,7 @@ export default function LandingPage() {
   ];
 
   if (user) {
-    window.location.href = '/chat';
-    return null;
+    return null; // Will redirect via useEffect
   }
 
   return (
