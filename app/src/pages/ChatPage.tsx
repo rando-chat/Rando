@@ -1,4 +1,4 @@
-// app/src/pages/ChatPage.tsx - UPDATED
+// app/src/pages/ChatPage.tsx
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -21,9 +21,11 @@ export default function ChatPage() {
   const [isGuest, setIsGuest] = useState(false);
   const [guestInfo, setGuestInfo] = useState({ id: '', username: 'Guest' });
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkSession = () => {
+      setLoading(true);
       if (user) {
         // Authenticated user
         setIsGuest(false);
@@ -47,29 +49,43 @@ export default function ChatPage() {
           return;
         }
       }
+      setLoading(false);
     };
 
     checkSession();
 
-    // Subscribe to online users
+    // Subscribe to online users only if authenticated
     const subscribeToUsers = async () => {
-      try {
-        const channel = await realtimeService.subscribeToOnlineUsers(setOnlineUsers);
-        channelRef.current = channel;
-      } catch (error) {
-        console.error('Failed to subscribe to online users:', error);
+      if (user) {
+        try {
+          const channel = await realtimeService.subscribeToOnlineUsers((userIds) => {
+            setOnlineUsers(userIds);
+            console.log('Online users updated:', userIds.length, 'users');
+          });
+          channelRef.current = channel;
+        } catch (error) {
+          console.error('Failed to subscribe to online users:', error);
+          // Fallback: show simulated count for guests
+          if (isGuest) {
+            setOnlineUsers(['guest_' + guestInfo.id]);
+          }
+        }
+      } else if (isGuest) {
+        // For guests, show simulated count
+        setOnlineUsers(['guest_' + guestInfo.id]);
       }
     };
 
     subscribeToUsers();
 
+    // Cleanup function
     return () => {
       if (channelRef.current) {
         channelRef.current.unsubscribe();
         channelRef.current = null;
       }
     };
-  }, [user, router]);
+  }, [user, isGuest, guestInfo.id, router]);
 
   const handleMatchFound = (sessionId: string) => {
     setCurrentSession(sessionId);
@@ -127,8 +143,19 @@ export default function ChatPage() {
     return user?.tier || 'free';
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dark flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading chat...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user && !isGuest) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   if (showVerification) {
@@ -153,7 +180,11 @@ export default function ChatPage() {
             </div>
             <div className="hidden md:flex items-center space-x-2 text-sm text-gray-400">
               <div className="w-2 h-2 rounded-full bg-success animate-pulse"></div>
-              <span>{onlineUsers.length} online</span>
+              <span>
+                {onlineUsers.length > 0 
+                  ? `${onlineUsers.length} user${onlineUsers.length !== 1 ? 's' : ''} online` 
+                  : 'Connecting...'}
+              </span>
             </div>
           </div>
 
