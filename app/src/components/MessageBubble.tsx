@@ -1,12 +1,12 @@
 // app/src/components/MessageBubble.tsx
 import React from 'react';
-import { Message } from '@/types';
+import { Message, User, GuestUser } from '@/types';
 import { format } from 'date-fns';
 
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
-  displayName?: string; // Add this prop for guest mode
+  displayName?: string;
 }
 
 export default function MessageBubble({ message, isOwn, displayName }: MessageBubbleProps) {
@@ -14,8 +14,20 @@ export default function MessageBubble({ message, isOwn, displayName }: MessageBu
     ? format(new Date(message.created_at), 'HH:mm')
     : '';
 
-  // Use displayName if provided, otherwise use sender username
-  const senderName = displayName || message.sender?.username || 'Anonymous';
+  // Handle both User and GuestUser types
+  let senderName = 'Anonymous';
+  if (displayName) {
+    senderName = displayName;
+  } else if (message.sender) {
+    // Check if sender is User or GuestUser
+    if ('email' in message.sender) {
+      // It's a User
+      senderName = (message.sender as User).username || 'Anonymous';
+    } else {
+      // It's a GuestUser
+      senderName = (message.sender as GuestUser).username || 'Anonymous';
+    }
+  }
 
   if (message.content_type === 'image') {
     return (
