@@ -1,3 +1,4 @@
+// app/src/components/MessageBubble.tsx
 import React from 'react';
 import { Message } from '@/types';
 import { format } from 'date-fns';
@@ -5,12 +6,16 @@ import { format } from 'date-fns';
 interface MessageBubbleProps {
   message: Message;
   isOwn: boolean;
+  displayName?: string; // Add this prop
 }
 
-export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
+export default function MessageBubble({ message, isOwn, displayName }: MessageBubbleProps) {
   const timestamp = message.created_at 
     ? format(new Date(message.created_at), 'HH:mm')
     : '';
+
+  // Use displayName if provided, otherwise use sender username
+  const senderName = displayName || message.sender?.username || 'Anonymous';
 
   if (message.content_type === 'image') {
     return (
@@ -47,9 +52,9 @@ export default function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   return (
     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div className={`max-w-[70%] ${isOwn ? 'ml-auto' : ''}`}>
-        {!isOwn && message.sender && (
+        {!isOwn && (
           <div className="text-xs text-gray-500 mb-1">
-            {message.sender.username}
+            {senderName}
           </div>
         )}
         <div
