@@ -1,9 +1,6 @@
-// app/src/components/ui/Modal.tsx
 'use client';
 
 import React, { useEffect } from 'react';
-import { cn } from '@/lib/utils';
-import { X } from 'lucide-react';
 
 interface ModalProps {
   isOpen: boolean;
@@ -28,7 +25,6 @@ const Modal = ({
   preventClose = false,
   className,
 }: ModalProps) => {
-  // Handle Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !preventClose) {
@@ -47,7 +43,6 @@ const Modal = ({
     };
   }, [isOpen, onClose, preventClose]);
 
-  // Handle backdrop click
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget && !preventClose) {
       onClose();
@@ -74,30 +69,26 @@ const Modal = ({
       {/* Modal container */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
-          className={cn(
-            'relative w-full rounded-2xl border border-rando-border bg-rando-card shadow-2xl animate-slide-in',
-            sizeClasses[size],
-            className
-          )}
+          className={`relative w-full rounded-2xl border border-[#2d2d4a] bg-[#1a1a2e] shadow-2xl ${sizeClasses[size]} ${className || ''}`}
         >
           {/* Header */}
           {(title || showCloseButton) && (
-            <div className="flex items-center justify-between border-b border-rando-border p-6">
+            <div className="flex items-center justify-between border-b border-[#2d2d4a] p-6">
               <div>
                 {title && (
-                  <h3 className="text-xl font-bold text-text-primary">{title}</h3>
+                  <h3 className="text-xl font-bold text-white">{title}</h3>
                 )}
                 {description && (
-                  <p className="mt-1 text-sm text-text-secondary">{description}</p>
+                  <p className="mt-1 text-sm text-[#B8B8D1]">{description}</p>
                 )}
               </div>
               {showCloseButton && !preventClose && (
                 <button
                   onClick={onClose}
-                  className="rounded-lg p-2 text-text-secondary hover:bg-rando-input hover:text-text-primary transition-colors"
+                  className="rounded-lg p-2 text-[#B8B8D1] hover:bg-[#252540] hover:text-white transition-colors"
                   aria-label="Close modal"
                 >
-                  <X className="h-5 w-5" />
+                  ✕
                 </button>
               )}
             </div>
