@@ -1,10 +1,7 @@
-// app/src/components/chat/ConversationStarters.tsx
 'use client';
 
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
-import { Sparkles, RefreshCw, Star, MessageSquare } from 'lucide-react';
 
 interface ConversationStartersProps {
   onSelect: (starter: string) => void;
@@ -41,16 +38,6 @@ const conversationStarters = [
     ],
     emoji: '🎓',
   },
-  {
-    category: 'Creative & Arts',
-    starters: [
-      "What's a creative project you're currently excited about?",
-      "If you could collaborate with any artist/creator, who would it be?",
-      "What's something you find beautiful that others might overlook?",
-      "What's your favorite way to express yourself creatively?",
-    ],
-    emoji: '🎨',
-  },
 ];
 
 const ConversationStarters = ({ onSelect }: ConversationStartersProps) => {
@@ -74,32 +61,31 @@ const ConversationStarters = ({ onSelect }: ConversationStartersProps) => {
   const currentCategory = conversationStarters[selectedCategory];
 
   return (
-    <Card variant="default" padding="md">
+    <div className="p-6 bg-[#1a1a2e] rounded-xl border border-[#2d2d4a]">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
-          <MessageSquare className="h-5 w-5 text-rando-gold" />
-          <h3 className="font-semibold">💡 Conversation Starters</h3>
+          <span className="text-[#D4AF37]">💡</span>
+          <h3 className="font-semibold">Conversation Starters</h3>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={getRandomStarter}
-          leftIcon={<RefreshCw className="h-4 w-4" />}
         >
           Random
         </Button>
       </div>
 
       {/* Category Tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
         {conversationStarters.map((category, index) => (
           <button
             key={category.category}
             onClick={() => setSelectedCategory(index)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
               selectedCategory === index
-                ? 'bg-rando-gold text-rando-bg'
-                : 'bg-rando-input text-text-secondary hover:text-text-primary'
+                ? 'bg-[#D4AF37] text-[#0f0f1a]'
+                : 'bg-[#252540] text-[#8a8aa3] hover:text-white'
             }`}
           >
             {category.emoji} {category.category}
@@ -112,70 +98,41 @@ const ConversationStarters = ({ onSelect }: ConversationStartersProps) => {
         {currentCategory.starters.map((starter, index) => (
           <div
             key={index}
-            className="group flex items-center justify-between p-3 rounded-lg bg-rando-input hover:bg-rando-input/80 transition-colors"
+            className="group flex items-center justify-between p-3 rounded-lg bg-[#252540] hover:bg-[#2d2d4a] transition-colors"
           >
             <button
               onClick={() => onSelect(starter)}
-              className="flex-1 text-left hover:text-rando-gold transition-colors"
+              className="flex-1 text-left hover:text-[#D4AF37] transition-colors text-sm"
             >
               {starter}
             </button>
             <button
               onClick={() => toggleFavorite(starter)}
-              className="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-rando-card transition-all"
+              className="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#1a1a2e] transition-all"
             >
-              <Star
-                className={`h-4 w-4 ${
-                  favorites.includes(starter)
-                    ? 'fill-rando-gold text-rando-gold'
-                    : 'text-text-secondary'
-                }`}
-              />
+              <span className={`text-sm ${
+                favorites.includes(starter)
+                  ? 'text-[#D4AF37]'
+                  : 'text-[#8a8aa3]'
+              }`}>
+                {favorites.includes(starter) ? '★' : '☆'}
+              </span>
             </button>
           </div>
         ))}
       </div>
 
-      {/* Favorites Section */}
-      {favorites.length > 0 && (
-        <div className="border-t border-rando-border pt-4">
-          <div className="flex items-center space-x-2 mb-2">
-            <Star className="h-4 w-4 text-rando-gold" />
-            <h4 className="text-sm font-semibold">Your Favorites</h4>
-          </div>
-          <div className="space-y-2">
-            {favorites.slice(0, 3).map((starter, index) => (
-              <div
-                key={index}
-                className="p-2 rounded bg-rando-gold/10 border border-rando-gold/30"
-              >
-                <div className="text-sm">{starter}</div>
-                <div className="flex justify-end mt-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onSelect(starter)}
-                  >
-                    Use
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* AI Suggestion */}
-      <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-rando-purple/20 to-rando-gold/10 border border-rando-border">
+      <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-[#2E235E]/20 to-[#D4AF37]/10 border border-[#2d2d4a]">
         <div className="flex items-center space-x-2 mb-1">
-          <Sparkles className="h-4 w-4 text-rando-gold" />
+          <span className="text-[#D4AF37]">✨</span>
           <span className="text-sm font-medium">Pro Tip</span>
         </div>
-        <p className="text-xs text-text-secondary">
+        <p className="text-xs text-[#8a8aa3]">
           People respond best to open-ended questions that show genuine interest in their thoughts and experiences.
         </p>
       </div>
-    </Card>
+    </div>
   );
 };
 
