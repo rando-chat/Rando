@@ -1,4 +1,4 @@
-// app/src/pages/LandingPage.tsx - UPDATED
+// app/src/pages/LandingPage.tsx - UPDATED VERSION
 'use client';
 
 import React, { useState } from 'react';
@@ -6,175 +6,360 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { signIn, signUp } from '@/lib/supabase/auth';
 import toast from 'react-hot-toast';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import Modal from '@/components/ui/Modal';
+import StudentVerification from '@/components/student/StudentVerification';
+import TierCard from '@/components/ui/TierCard';
+import { 
+  MessageSquare, 
+  Shield, 
+  Star, 
+  Zap, 
+  Users, 
+  Globe,
+  CheckCircle,
+  Sparkles
+} from 'lucide-react';
 
 export default function LandingPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [showAuth, setShowAuth] = useState(false);
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  const [showTiers, setShowTiers] = useState(false);
+  const [authMode, setAuthMode] = useState<'quick' | 'quality'>('quick');
   const [loading, setLoading] = useState(false);
 
-  // Quick anonymous chat - FIXED
   const handleQuickChat = () => {
-    setLoading(true);
-    
+    setShowAgeModal(true);
+  };
+
+  const confirmAge = () => {
     // Generate guest ID
     const guestId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const guestUsername = `Guest_${Math.random().toString(36).substr(2, 6)}`;
-    
-    // Store in localStorage
     localStorage.setItem('rando_guest_id', guestId);
-    localStorage.setItem('rando_guest_username', guestUsername);
     
     toast.success('Starting anonymous chat...');
     router.push('/chat');
   };
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      toast.error('Email and password required');
-      return;
-    }
+  const handleQualityChat = () => {
+    setAuthMode('quality');
+    setShowTiers(true);
+  };
 
-    setLoading(true);
-    try {
-      if (isLogin) {
-        const result = await signIn(email, password);
-        if (result.success) {
-          toast.success('Welcome back!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Authentication failed');
-        }
-      } else {
-        const result = await signUp(email, password, username || `user_${Date.now().toString().slice(-6)}`);
-        if (result.success) {
-          toast.success('Account created!');
-          router.push('/chat');
-        } else {
-          toast.error(result.error || 'Sign up failed');
-        }
-      }
-    } catch (error: any) {
-      toast.error(error.message || 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
+  const features = [
+    { icon: Shield, text: 'Safe & Moderated', color: 'text-success' },
+    { icon: Zap, text: 'Instant Matching', color: 'text-rando-gold' },
+    { icon: Users, text: '2.4M+ Users', color: 'text-info' },
+    { icon: Globe, text: '127 Countries', color: 'text-rando-coral' },
+  ];
+
+  const tierFeatures = {
+    free: [
+      { text: 'Basic text chat', included: true },
+      { text: 'Anonymous guest mode', included: true },
+      { text: 'Safe & moderated', included: true },
+      { text: 'Image sharing', included: false },
+      { text: 'Save conversations', included: false },
+      { text: 'Priority matching', included: false },
+    ],
+    student: [
+      { text: 'Everything in Free', included: true },
+      { text: 'Image sharing', included: true },
+      { text: 'Save conversations', included: true },
+      { text: 'Student verification badge', included: true },
+      { text: 'Priority matching', included: true },
+      { text: 'No ads', included: true },
+    ],
+    premium: [
+      { text: 'Everything in Student', included: true },
+      { text: 'Premium badge', included: true },
+      { text: 'Highest priority matching', included: true },
+      { text: 'Advanced filters', included: true },
+      { text: 'Custom themes', included: true },
+      { text: 'Dedicated support', included: true },
+    ],
   };
 
   return (
-    <div className="min-h-screen gradient-bg flex flex-col">
-      {/* Simple Header */}
-      <div className="text-center pt-20 px-4">
-        <h1 className="text-7xl md:text-9xl font-bold mb-6 bg-gradient-to-r from-gold via-white to-gold bg-clip-text text-transparent">
-          RANDO
-        </h1>
-        <p className="text-2xl text-gray-300 mb-2">Chat with random people</p>
-        <p className="text-gray-400">100% free • Anonymous option</p>
+    <div className="min-h-screen bg-rando-bg overflow-hidden">
+      {/* Animated Background */}
+      <div className="fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-rando-purple/10 via-transparent to-rando-gold/5" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-rando-purple/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-rando-gold/20 rounded-full blur-3xl" />
       </div>
 
-      {/* Main Action */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4">
-        {/* Big Chat Button */}
-        <div className="text-center mb-8 w-full max-w-2xl">
-          <button
-            onClick={handleQuickChat}
-            disabled={loading}
-            className="bg-gradient-to-r from-gold to-coral text-dark text-3xl font-bold px-12 py-6 rounded-2xl shadow-2xl hover:scale-105 transition-transform disabled:opacity-50 w-full"
-          >
-            {loading ? 'Loading...' : '🎯 START RANDOM CHAT'}
-          </button>
-          <p className="text-gray-400 mt-4">No account needed • Instant matching • Free forever</p>
-        </div>
-
-        {/* Optional Auth */}
-        <div className="w-full max-w-md mt-8">
-          {!showAuth ? (
-            <div className="text-center">
-              <button
-                onClick={() => setShowAuth(true)}
-                className="text-gold hover:text-gold/80 text-lg"
+      {/* Header */}
+      <header className="container mx-auto px-4 py-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-gradient-to-r from-rando-purple to-rando-gold rounded-lg">
+              <MessageSquare className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-rando-purple via-rando-gold to-rando-coral bg-clip-text text-transparent">
+              RANDO
+            </h1>
+          </div>
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              onClick={() => setShowTiers(true)}
+            >
+              Pricing
+            </Button>
+            {!user && (
+              <Button
+                variant="outline"
+                onClick={() => router.push('/login')}
               >
-                Or create account to save chats & get features
-              </button>
-            </div>
-          ) : (
-            <div className="glass rounded-2xl p-6">
-              <div className="flex border-b border-gray-800 mb-6">
-                <button
-                  onClick={() => setIsLogin(true)}
-                  className={`flex-1 py-3 font-bold ${isLogin ? 'text-gold border-b-2 border-gold' : 'text-gray-400'}`}
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => setIsLogin(false)}
-                  className={`flex-1 py-3 font-bold ${!isLogin ? 'text-gold border-b-2 border-gold' : 'text-gray-400'}`}
-                >
-                  Sign Up
-                </button>
-              </div>
-
-              <form onSubmit={handleAuth} className="space-y-4">
-                {!isLogin && (
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Username (optional)"
-                    className="input-field"
-                  />
-                )}
-
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  className="input-field"
-                  required
-                />
-
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password (min 6 chars)"
-                  className="input-field"
-                  required
-                  minLength={6}
-                />
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-secondary w-full py-3"
-                >
-                  {loading ? 'Loading...' : isLogin ? 'Login' : 'Sign Up'}
-                </button>
-              </form>
-
-              <div className="mt-4 text-center">
-                <button
-                  onClick={() => setShowAuth(false)}
-                  className="text-gray-400 hover:text-white text-sm"
-                >
-                  ← Back to quick chat
-                </button>
-              </div>
-            </div>
-          )}
+                Login
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Simple Footer */}
-      <div className="py-8 text-center text-gray-500 text-sm px-4">
-        <p>Chat randomly • No subscriptions • Safe & moderated</p>
-      </div>
+      {/* Hero Section */}
+      <main className="container mx-auto px-4 py-12 md:py-24">
+        <div className="text-center max-w-4xl mx-auto">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-rando-gold/10 border border-rando-gold/30 mb-6">
+            <Sparkles className="h-4 w-4 text-rando-gold mr-2" />
+            <span className="text-sm font-medium text-rando-gold">
+              Trusted by 2.4M+ users worldwide
+            </span>
+          </div>
+          
+          <h1 className="text-5xl md:text-7xl font-bold mb-6">
+            <span className="bg-gradient-to-r from-rando-purple via-rando-gold to-rando-coral bg-clip-text text-transparent">
+              Chat Randomly.
+            </span>
+            <br />
+            <span className="text-text-primary">Meet Authentically.</span>
+          </h1>
+          
+          <p className="text-xl text-text-secondary mb-12 max-w-2xl mx-auto">
+            Connect with real people worldwide. No filters, no algorithms—just genuine conversations.
+          </p>
+
+          {/* Dual Path Choice */}
+          <div className="grid md:grid-cols-2 gap-6 mb-12 max-w-3xl mx-auto">
+            <Card
+              variant="default"
+              padding="lg"
+              hover
+              onClick={handleQuickChat}
+              className="cursor-pointer text-center"
+            >
+              <div className="text-4xl mb-4">🎭</div>
+              <h3 className="text-xl font-bold mb-2">Quick Chat</h3>
+              <p className="text-text-secondary mb-6">
+                Start instantly, no signup needed. Perfect for spontaneous conversations.
+              </p>
+              <div className="space-y-2 mb-6">
+                <div className="flex items-center justify-center text-sm">
+                  <CheckCircle className="h-4 w-4 text-success mr-2" />
+                  <span>Instant start</span>
+                </div>
+                <div className="flex items-center justify-center text-sm">
+                  <CheckCircle className="h-4 w-4 text-success mr-2" />
+                  <span>Anonymous</span>
+                </div>
+                <div className="flex items-center justify-center text-sm">
+                  <CheckCircle className="h-4 w-4 text-success mr-2" />
+                  <span>No commitment</span>
+                </div>
+              </div>
+              <Button
+                variant="default"
+                size="lg"
+                fullWidth
+                leftIcon="⚡"
+              >
+                Start Free Chat
+              </Button>
+            </Card>
+
+            <Card
+              variant="gold"
+              padding="lg"
+              hover
+              onClick={handleQualityChat}
+              className="cursor-pointer text-center"
+            >
+              <div className="text-4xl mb-4">⭐</div>
+              <h3 className="text-xl font-bold mb-2">Quality Chat</h3>
+              <p className="text-text-secondary mb-6">
+                Better matches, saved conversations, and premium features.
+              </p>
+              <div className="space-y-2 mb-6">
+                <div className="flex items-center justify-center text-sm">
+                  <Star className="h-4 w-4 text-rando-gold mr-2" />
+                  <span>Better matches</span>
+                </div>
+                <div className="flex items-center justify-center text-sm">
+                  <Star className="h-4 w-4 text-rando-gold mr-2" />
+                  <span>Save conversations</span>
+                </div>
+                <div className="flex items-center justify-center text-sm">
+                  <Star className="h-4 w-4 text-rando-gold mr-2" />
+                  <span>Image sharing</span>
+                </div>
+              </div>
+              <Button
+                variant="gold"
+                size="lg"
+                fullWidth
+                leftIcon="🎓"
+              >
+                Start Quality Chat
+              </Button>
+            </Card>
+          </div>
+
+          {/* Features */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+            {features.map((feature, index) => (
+              <div key={index} className="text-center">
+                <feature.icon className={`h-8 w-8 mx-auto mb-2 ${feature.color}`} />
+                <p className="text-sm font-medium">{feature.text}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Student Verification */}
+          <div className="max-w-md mx-auto">
+            <StudentVerification
+              isVerified={false}
+              onVerify={async (email, university) => {
+                // Implement verification logic
+                toast.success('Verification email sent!');
+              }}
+            />
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="container mx-auto px-4 py-8 border-t border-rando-border">
+        <div className="text-center text-text-secondary text-sm">
+          <p className="mb-2">🔞 Must be 18+ • 🛡️ Safe & Moderated • 🆓 Completely Free</p>
+          <p>© {new Date().getFullYear()} RANDO. Chat responsibly.</p>
+        </div>
+      </footer>
+
+      {/* Age Verification Modal */}
+      <Modal
+        isOpen={showAgeModal}
+        onClose={() => setShowAgeModal(false)}
+        title="⚠️ Age Verification Required"
+        description="To use RANDO, you must be 18 years or older."
+      >
+        <div className="space-y-6">
+          <div className="p-4 bg-rando-input rounded-lg">
+            <p className="text-text-secondary">
+              This platform contains conversations with strangers. By continuing, 
+              you confirm you're at least 18 years old and agree to our{' '}
+              <button className="text-rando-gold hover:underline">Terms of Service</button>.
+            </p>
+          </div>
+          
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              fullWidth
+              onClick={() => setShowAgeModal(false)}
+            >
+              I'm under 18
+            </Button>
+            <Button
+              variant="gold"
+              fullWidth
+              onClick={confirmAge}
+            >
+              ✅ I'm 18+
+            </Button>
+          </div>
+          
+          <div className="text-center text-sm text-text-secondary">
+            <Shield className="inline h-4 w-4 mr-1" />
+            Your privacy and safety are our top priority
+          </div>
+        </div>
+      </Modal>
+
+      {/* Tiers Modal */}
+      <Modal
+        isOpen={showTiers}
+        onClose={() => setShowTiers(false)}
+        title="✨ Choose Your Plan"
+        description="Start with Free, upgrade anytime"
+        size="xl"
+      >
+        <div className="grid md:grid-cols-3 gap-6">
+          <TierCard
+            tier="free"
+            title="Free"
+            description="Perfect for trying out"
+            price={{ monthly: 0 }}
+            features={tierFeatures.free}
+            ctaText={
+              authMode === 'quick' 
+                ? 'Start Quick Chat' 
+                : 'Continue with Free'
+            }
+            onCtaClick={() => {
+              if (authMode === 'quick') {
+                setShowTiers(false);
+                handleQuickChat();
+              } else {
+                // Navigate to signup
+                router.push('/signup');
+              }
+            }}
+          />
+          
+          <TierCard
+            tier="student"
+            title="Student"
+            description="50% discount for students"
+            price={{ monthly: 2.49, yearly: 24.99 }}
+            features={tierFeatures.student}
+            ctaText="Get Student Plan"
+            onCtaClick={() => {
+              // Navigate to student verification
+              router.push('/student-verify');
+            }}
+            popular
+            featured
+          />
+          
+          <TierCard
+            tier="premium"
+            title="Premium"
+            description="Full experience"
+            price={{ monthly: 4.99, yearly: 49.99 }}
+            features={tierFeatures.premium}
+            ctaText="Go Premium"
+            onCtaClick={() => {
+              router.push('/premium');
+            }}
+          />
+        </div>
+        
+        <div className="mt-8 p-4 bg-rando-input rounded-lg">
+          <div className="flex items-center space-x-3">
+            <Shield className="h-5 w-5 text-success" />
+            <div>
+              <p className="font-medium">All plans include:</p>
+              <p className="text-sm text-text-secondary">
+                Safe moderation, no time limits, and our community guidelines protection.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
