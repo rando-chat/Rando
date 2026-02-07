@@ -8,11 +8,11 @@ import { trackAnalytics } from '@/lib/supabase/auth';
 import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import MessageBubble from './MessageBubble';
-import ConversationStarters from './chat/ConversationStarters';
-import GuestProgress from './guest/GuestProgress';
-import { Button } from './ui/Button';
-import { Badge } from './ui/Badge';
-import { Card } from './ui/Card';
+import ConversationStarters from '../chat/ConversationStarters';
+import GuestProgress from '../guest/GuestProgress';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { Card } from '../ui/Card';
 import toast from 'react-hot-toast';
 
 interface ChatInterfaceProps {
