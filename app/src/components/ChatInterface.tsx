@@ -1,6 +1,4 @@
-// app/src/components/ChatInterface.tsx - PARTIAL UPDATE (key sections)
-// I'll show the updated sections that incorporate the new design system:
-
+// app/src/components/ChatInterface.tsx - FIXED VERSION
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -16,6 +14,9 @@ import GuestProgress from './guest/GuestProgress';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { Card } from './ui/Card';
+import toast from 'react-hot-toast';
+
+// Import icons from lucide-react
 import { 
   Image as ImageIcon, 
   Send, 
@@ -27,7 +28,13 @@ import {
   Zap,
   Crown
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+
+interface ChatInterfaceProps {
+  sessionId: string;
+  onEndSession: () => void;
+  isGuest?: boolean;
+  guestId?: string;
+}
 
 export default function ChatInterface({ 
   sessionId, 
@@ -35,15 +42,202 @@ export default function ChatInterface({
   isGuest = false, 
   guestId 
 }: ChatInterfaceProps) {
-  // ... existing state and hooks ...
+  const router = useRouter();
+  const { messages, session, sendMessage, endSession } = useChat(sessionId);
+  const { user } = useAuth();
+  const [input, setInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [guestMessages, setGuestMessages] = useState<any[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Add conversation starter handler
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, guestMessages]);
+
+  // Guest-specific message sending
+  const sendGuestMessage = async (content: string) => {
+    if (!guestId) return { success: false, error: 'No guest ID' };
+
+    const tempMessage = {
+      id: `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      content: content,
+      sender_id: guestId,
+      sender_name: `Guest_${guestId.slice(-4)}`,
+      type: 'text' as const,
+      content_type: 'text' as const,
+      created_at: new Date().toISOString(),
+      session_id: sessionId,
+      moderated: false,
+      sender: {
+        id: guestId,
+        username: `Guest_${guestId.slice(-4)}`
+      }
+    };
+
+    setGuestMessages(prev => [...prev, tempMessage]);
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          session_id: sessionId,
+          content: content,
+          sender_id: guestId,
+          sender_name: `Guest_${guestId.slice(-4)}`,
+          content_type: 'text',
+          is_guest: true
+        });
+
+      if (error) {
+        console.log('Guest message not saved to DB:', error.message);
+      }
+
+      trackAnalytics('guest_message_sent', {
+        sessionId,
+        length: content.length,
+        guestId: guestId.slice(0, 8)
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Guest message error:', error);
+      return { success: false, error: 'Failed to send message' };
+    }
+  };
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    const trimmedInput = input.trim();
+    setInput('');
+
+    if (isGuest && guestId) {
+      const result = await sendGuestMessage(trimmedInput);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to send message');
+        setInput(trimmedInput);
+      } else {
+        toast.success('Message sent');
+      }
+    } else {
+      const result = await sendMessage(trimmedInput);
+      if (!result.success) {
+        toast.error(result.error || 'Failed to send message');
+        setInput(trimmedInput);
+      }
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isGuest) {
+      toast.error('Guests cannot send images. Create an account for full features.');
+      return;
+    }
+
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are allowed');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const uploadResult = await uploadImage(file, user.id);
+      if (!uploadResult) {
+        throw new Error('Upload failed');
+      }
+
+      const result = await sendMessage(uploadResult.url, 'image');
+      if (!result.success) {
+        toast.error(result.error || 'Failed to send image');
+      } else {
+        await trackAnalytics('image_sent', {
+          sessionId,
+          fileSize: file.size,
+          fileType: file.type,
+        });
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload image');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleEndChat = async () => {
+    if (isGuest) {
+      toast.success('Chat ended');
+      onEndSession();
+
+      trackAnalytics('guest_session_ended', {
+        sessionId,
+        messageCount: guestMessages.length,
+        guestId: guestId?.slice(0, 8)
+      });
+    } else {
+      const result = await endSession();
+      if (result.success) {
+        toast.success('Chat ended');
+        onEndSession();
+      } else {
+        toast.error(result.error || 'Failed to end chat');
+      }
+    }
+  };
+
+  const getPartner = () => {
+    if (!session || !user) return null;
+
+    const partnerId = session.user1_id === user.id ? session.user2_id : session.user1_id;
+    const partnerName = session.user1_id === user.id 
+      ? session.user2?.username 
+      : session.user1?.username;
+
+    return {
+      id: partnerId,
+      username: partnerName || 'Anonymous',
+      isGuest: session.user1_id === user.id 
+        ? session.is_guest2 || false 
+        : session.is_guest1 || false
+    };
+  };
+
+  const partner = getPartner();
+  const displayName = partner?.isGuest ? 'Anonymous' : (partner?.username || 'Anonymous');
+  const allMessages = isGuest ? [...guestMessages] : messages;
+
+  // Helper function for random colors
+  const getRandomColor = () => {
+    const colors = [
+      'bg-gradient-to-r from-rando-purple to-rando-purple-700',
+      'bg-gradient-to-r from-rando-gold to-rando-gold-600',
+      'bg-gradient-to-r from-rando-coral to-rando-coral-600',
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
   const handleStarterSelect = (starter: string) => {
     setInput(starter);
     toast.success('Starter added to input');
   };
 
-  // Updated Header Section
+  // Chat Header Component - FIXED
   const ChatHeader = () => (
     <div className="glass border-b border-rando-border p-4">
       <div className="flex items-center justify-between">
@@ -56,16 +250,6 @@ export default function ChatInterface({
           <div>
             <div className="flex items-center space-x-2">
               <h3 className="font-bold text-lg">{displayName}</h3>
-              {partner?.isPremium && (
-                <Badge variant="premium" size="sm" dot leftIcon={<Crown className="h-3 w-3" />}>
-                  Premium
-                </Badge>
-              )}
-              {partner?.isStudent && (
-                <Badge variant="student" size="sm" dot>
-                  Student
-                </Badge>
-              )}
             </div>
             <div className="flex items-center space-x-3 text-sm text-text-secondary">
               <span className="flex items-center">
@@ -94,7 +278,6 @@ export default function ChatInterface({
             variant="ghost"
             size="sm"
             leftIcon={<Shield className="h-4 w-4" />}
-            onClick={() => {/* Safety overlay */}}
           >
             Safety
           </Button>
@@ -111,7 +294,7 @@ export default function ChatInterface({
     </div>
   );
 
-  // Updated Input Section
+  // Chat Input Component - FIXED
   const ChatInput = () => (
     <div className="glass border-t border-rando-border p-4 pb-safe">
       {/* Conversation Starters */}
@@ -121,18 +304,18 @@ export default function ChatInterface({
         </div>
       )}
       
-      <form onSubmit={handleSend} className="flex space-x-3">
-        {/* Guest Progress */}
-        {isGuest && guestId && (
-          <div className="mb-4">
-            <GuestProgress
-              currentChatCount={/* Get from localStorage */}
-              onUpgrade={() => router.push('/signup')}
-              onContinue={() => {}}
-            />
-          </div>
-        )}
+      {/* Guest Progress */}
+      {isGuest && guestId && (
+        <div className="mb-4">
+          <GuestProgress
+            currentChatCount={3} // Replace with actual count
+            onUpgrade={() => router.push('/signup')}
+            onContinue={() => {}}
+          />
+        </div>
+      )}
 
+      <form onSubmit={handleSend} className="flex space-x-3">
         {/* Image Upload (non-guests only) */}
         {!isGuest && (
           <>
@@ -188,14 +371,12 @@ export default function ChatInterface({
             <button
               type="button"
               className="p-1.5 text-text-secondary hover:text-text-primary transition-colors"
-              onClick={() => {/* Emoji picker */}}
             >
               <Smile className="h-5 w-5" />
             </button>
             <button
               type="button"
               className="p-1.5 text-text-secondary hover:text-text-primary transition-colors"
-              onClick={() => {/* Voice message */}}
             >
               <Mic className="h-5 w-5" />
             </button>
@@ -225,7 +406,7 @@ export default function ChatInterface({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowTiers(true)}
+              onClick={() => {/* Show tiers */}}
               leftIcon={<Zap className="h-4 w-4" />}
             >
               Upgrade to send images
@@ -250,7 +431,6 @@ export default function ChatInterface({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {/* Next chat */}}
             leftIcon={<SkipForward className="h-4 w-4" />}
           >
             Next Chat
