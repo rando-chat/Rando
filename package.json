@@ -1,5 +1,5 @@
 {
-  "name": "rando-supabase",
+  "name": "rando-chat",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -7,39 +7,47 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "supabase": "supabase",
-    "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop",
-    "supabase:push": "supabase db push",
-    "supabase:reset": "supabase db reset",
-    "deploy": "vercel --prod"
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit",
+    "supabase:push": "npx supabase db push",
+    "supabase:reset": "npx supabase db reset",
+    "supabase:gen-types": "npx supabase gen types typescript --project-id your-project-id > lib/types/database.types.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.3",
-    "@vercel/analytics": "^1.1.1",
-    "next": "14.2.13",
+    "@supabase/auth-helpers-nextjs": "^0.8.6",
+    "@supabase/supabase-js": "^2.42.0",
+    "@tailwindcss/typography": "^0.5.10",
+    "@types/node": "20.10.5",
+    "@types/react": "18.2.45",
+    "@types/react-dom": "18.2.18",
+    "@vercel/analytics": "^1.1.2",
+    "autoprefixer": "^10.4.16",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "14.0.4",
+    "lucide-react": "^0.309.0",
+    "next": "^14.2.5",
+    "next-themes": "^0.2.1",
+    "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-hot-toast": "^2.6.0",
-    "resend": "^3.0.0",
-    "tailwindcss": "^3.3.0",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "clsx": "^2.1.1",
-    "date-fns": "^3.0.6",
-    "uuid": "^9.0.1",
-    "zod": "^3.22.4",
-    "class-variance-authority": "^0.7.0",
-    "lucide-react": "^0.344.0",
-    "tailwind-merge": "^2.2.1"
+    "resend": "^2.0.0",
+    "stripe": "^14.17.0",
+    "supabase": "^1.129.1",
+    "tailwind-merge": "^2.1.0",
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "5.3.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24",
-    "@types/react": "^18.2.61",
-    "@types/react-dom": "^18.2.19",
-    "@types/uuid": "^9.0.7",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.1.0",
-    "typescript": "^5.3.3"
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "prettier": "^3.1.1",
+    "prettier-plugin-tailwindcss": "^0.5.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

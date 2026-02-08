@@ -1,94 +1,101 @@
-# 🚀 RANDO - 100% Free Random Chat Platform
+# 💬 Rando Chat
 
 > **Chat Randomly. Meet Authentically.**
-> **Complete with Supabase, Vercel, and 100% Free Services**
 
-![RANDO Platform](https://img.shields.io/badge/Platform-RANDO-purple)
-![Free Tier](https://img.shields.io/badge/Cost-$0%2Fmonth-green)
-![React](https://img.shields.io/badge/React-18-blue)
-![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-emerald)
-![Vercel](https://img.shields.io/badge/Vercel-Edge%20Functions-black)
+![Rando Chat](https://img.shields.io/badge/Platform-Rando%20Chat-purple)
+![Next.js](https://img.shields.io/badge/Next.js-14-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![Supabase](https://img.shields.io/badge/Supabase-3.0-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+A modern, secure random chat platform connecting people through anonymous, meaningful conversations. Built with safety and user experience as top priorities.
+
+![Rando Chat Preview](public/preview.png)
 
 ## ✨ Features
 
-### 💬 Core Features
-- **100% Free Forever** - No monthly costs, no subscriptions required
-- **Text Chat Only** - Focus on meaningful conversations
-- **🔒 Link Blocking** - ALL URLs blocked automatically for safety
-- **📸 Image Sharing** - Premium/Student only (5MB max)
-- **📧 Email Verification** - Using Resend (3k free emails/month)
-- **👨‍🎓 Student Discount** - 50% off with .edu email verification
+### 🛡️ Advanced Safety
+- **Real-time Content Moderation** - AI-powered filtering system
+- **Auto-ban System** - 3 strikes policy for violations
+- **18+ Age Verification** - Strict age requirement enforcement
+- **Privacy Protection** - No personal data required for guests
 
-### 🛡️ Safety Features
-- **Complete URL blocking** - No links allowed in chat
-- **Content moderation** - Profanity, PII, and harassment detection
-- **User reporting system** - 3 reports = auto-ban
-- **Age verification** - 18+ requirement
-- **Real-time monitoring** - Admin dashboard for moderation
+### 🤝 Smart Matching
+- **Interest-based Algorithm** - Connect with like-minded people
+- **Tier Priority System** - Premium users get faster matching
+- **Queue Position Tracking** - See your place in line
 
-### 💰 Monetization (Optional)
-- **Free**: Unlimited text chat, forever free
-- **Premium**: $4.99/month (images + priority matching)
-- **Student**: $2.49/month (50% discount with .edu email)
-- **No monthly platform fees** - Only payment processing fees (3.5%)
+### 💬 Real-time Chat
+- **WebSocket-powered Messaging** - Instant message delivery
+- **Typing Indicators** - See when others are typing
+- **Online Presence** - Know who's available
+
+### 👥 Access Options
+- **24-hour Guest Sessions** - Chat without registration
+- **Registered Accounts** - Enhanced features and preferences
+- **Dual Access System** - Flexible user experience
+
+### 🎯 Tier System
+- **Free Tier** - Basic text chat features
+- **Premium Tier** - $5.99/month (images + priority matching)
+- **Student Tier** - $2.99/month (50% discount with .edu email)
+
+### 📱 User Experience
+- **Mobile-first Design** - Fully responsive for all devices
+- **Intuitive Interface** - Clean, modern UI
+- **Accessibility Features** - Inclusive design principles
 
 ## 🏗️ Architecture
 
-**100% Serverless & Free:**
-- **Frontend**: React 18 + TypeScript + Tailwind CSS
-- **Hosting**: Vercel (Always free, 100GB bandwidth)
-- **Database**: Supabase PostgreSQL (Free 500MB)
-- **Auth**: Supabase Auth (Free 50k MAU)
-- **Realtime**: Supabase Realtime (WebSockets)
-- **Storage**: Supabase Storage (Free 1GB)
-- **Email**: Resend (Free 3k emails/month)
-- **Payments**: Lemon Squeezy (No monthly fee, 3.5% per transaction)
-- **Analytics**: Google Analytics 4 (Free)
-- **Domain**: Cloudflare (Free SSL/CDN)
+**Modern & Scalable Stack:**
+
+- **Frontend**: Next.js 14 + TypeScript + Tailwind CSS
+- **Hosting**: Vercel with Edge Functions
+- **Database**: Supabase PostgreSQL with Realtime
+- **Authentication**: Supabase Auth with social providers
+- **Storage**: Supabase Storage for media
+- **Email**: Resend for verification and notifications
+- **Payments**: Stripe/Lemon Squeezy for subscriptions
+- **Analytics**: Custom tracking and monitoring
+- **Security**: Multi-layer protection system
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 18.x or later
+- npm, yarn, or pnpm
 - Git
-- Accounts: Supabase, Vercel, Resend, Lemon Squeezy
+- Accounts: Supabase, Vercel, Resend
 
 ### 1. Clone & Setup
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/rando-supabase.git
-cd rando-supabase
+git clone https://github.com/yourusername/rando-chat.git
+cd rando-chat
 
 # Install dependencies
 npm install
-
-# Run setup script
-chmod +x scripts/setup.sh
-./scripts/setup.sh
 ```
 
 2. Environment Configuration
 
-Copy .env.example to .env and configure:
+Copy .env.example to .env.local:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit .env.local with your API keys:
 
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Email (Resend)
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+RESEND_API_KEY=your-resend-api-key
 FROM_EMAIL=hello@yourdomain.com
-
-# Payments (Lemon Squeezy)
-LEMON_SQUEEZY_API_KEY=ls_sk_xxxxxxxxxxxxxxxxxxxxxxxx
-LEMON_STORE_ID=12345
-LEMON_PRODUCT_ID=12345
-
-# Domain
-NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ```
 
 3. Local Development
@@ -96,6 +103,9 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ```bash
 # Start Supabase locally
 npx supabase start
+
+# Run migrations
+npx supabase db push
 
 # Start development server
 npm run dev
@@ -106,219 +116,187 @@ npm run dev
 4. Deploy to Production
 
 ```bash
-# Deploy with one command
-./scripts/deploy.sh
+# Build the application
+npm run build
 
-# Or manually:
-vercel --prod
+# Deploy to Vercel
+npx vercel --prod
 ```
 
 📁 Project Structure
 
 ```
-rando-supabase/
-├── app/                          # React Frontend
-│   ├── src/
-│   │   ├── components/          # React components
-│   │   ├── hooks/              # Custom React hooks
-│   │   ├── lib/                # Utility libraries
-│   │   ├── pages/              # Page components
-│   │   ├── styles/             # Global styles
-│   │   ├── types/              # TypeScript types
-│   │   ├── App.tsx             # Main app component
-│   │   └── main.tsx            # Entry point
-│   └── public/                 # Static assets
-├── api/                         # Vercel Edge Functions
-│   ├── email/                  # Email sending functions
-│   ├── payments/               # Payment processing
-│   └── moderation/             # Content moderation
-├── supabase/                   # Database configuration
-│   ├── migrations/             # Database migrations
-│   ├── functions/              # PostgreSQL functions
-│   └── seed.sql               # Sample data
-├── docs/                       # Documentation
-├── scripts/                    # Setup & deployment scripts
-└── README.md                  # This file
+rando-chat/
+├── app/                    # Next.js 14 App Router pages
+│   ├── (auth)/            # Authentication pages
+│   ├── chat/              # Chat interface
+│   ├── admin/             # Admin dashboard
+│   ├── api/               # API routes
+│   ├── layout.tsx         # Root layout
+│   └── page.tsx           # Landing page
+├── components/            # React components
+│   ├── auth/              # Auth components
+│   ├── chat/              # Chat components
+│   ├── matchmaking/       # Matchmaking UI
+│   ├── ui/                # Reusable UI components
+│   └── admin/             # Admin components
+├── lib/                   # Utilities & services
+│   ├── database/          # Supabase client
+│   ├── auth/              # Auth helpers
+│   ├── safety/            # Moderation system
+│   └── utils/             # Helper functions
+├── supabase/              # Database configuration
+│   ├── migrations/        # Database migrations
+│   ├── functions/         # PostgreSQL functions
+│   └── seeds/             # Seed data
+├── public/                # Static assets
+│   ├── images/            # Images and icons
+│   └── fonts/             # Font files
+├── tests/                 # Test files
+├── docs/                  # Documentation
+└── scripts/               # Build/deployment scripts
 ```
-
-🗄️ Database Schema
-
-Key tables:
-
-· users - User profiles (extends Supabase Auth)
-· chat_sessions - Active chat sessions
-· messages - Chat messages with real-time updates
-· matchmaking_queue - Users waiting for matches
-· reports - User reports for moderation
-· email_verifications - Email verification codes
-
-🔐 Security Features
-
-Row Level Security (RLS)
-
-Every table has RLS policies ensuring users can only access their own data.
-
-Content Safety
-
-· All URLs blocked automatically
-· Profanity filter
-· Phone/email detection
-· User reporting with auto-ban
-
-Authentication
-
-· JWT-based authentication
-· Email verification required
-· Secure password hashing
-· Session management
-
-💰 Cost Breakdown
-
-Monthly Cost: $0
-
-Service Free Tier Limits
-Supabase Free 50k MAU, 500MB DB, 1GB storage
-Vercel Free 100GB bandwidth, 100k Edge Functions
-Resend Free 3k emails/month
-Lemon Squeezy Free No monthly fee, 3.5% per transaction
-Cloudflare Free Unlimited CDN, free SSL
-Total $0/month Scalable to 50k users
-
-📈 Scalability
-
-Free Tier Limits
-
-· Users: Up to 50,000 monthly active users
-· Storage: 500MB database + 1GB file storage
-· Bandwidth: 100GB/month on Vercel
-· Emails: 3,000/month on Resend
-
-When to Upgrade
-
-1. > 50k MAU → Supabase Pro ($25/month)
-2. > 3k emails → Resend Pro ($20/month)
-3. > 100GB bandwidth → Vercel Pro ($20/month)
-4. > 500MB database → Supabase storage upgrade
-
-🎯 Features in Detail
-
-Real-time Chat
-
-· WebSocket connections via Supabase Realtime
-· Instant message delivery
-· Online user presence
-· Typing indicators (future)
-
-Matchmaking System
-
-· Smart matching based on interests
-· Tier-based priority (Premium > Student > Free)
-· Queue system with position tracking
-· Automatic cleanup of stale entries
-
-Email System
-
-· Verification codes for signup
-· Student verification for .edu emails
-· Welcome emails
-· Password reset (future)
-
-Payment Processing
-
-· Lemon Squeezy integration
-· One-time and subscription payments
-· Student discount automation
-· Webhook handling for payment events
-
-Admin Dashboard
-
-· User management
-· Report review system
-· Analytics overview
-· Content moderation tools
-
-🧪 Testing
-
-Test Accounts
-
-After seeding the database:
-
-```bash
-# Run seed script
-./scripts/seed-database.sh
-```
-
-Test accounts:
-
-· Admin: admin@example.com / admin123
-· Student: student@example.edu / student123
-· Premium: premium@example.com / premium123
-· Free: free@example.com / free123
-
-Testing Flow
-
-1. Register new account
-2. Verify email
-3. Start matchmaking
-4. Test chat functionality
-5. Test image upload (premium/student)
-6. Test user reporting
-7. Test payment flow
-
-🚨 Important Notes
-
-Free Services Limitations
-
-1. Supabase: 2 projects max on free tier
-2. Vercel: 100GB bandwidth/month
-3. Resend: 100 emails/day sending limit
-4. Lemon Squeezy: Test mode for development
-
-Production Readiness
-
-· Set up custom domain
-· Configure SSL certificates
-· Set up monitoring
-· Configure backups
-· Set up error tracking
-· Create privacy policy & terms
-
-📊 Analytics
-
-Tracked events:
-
-· sign_up - New user registration
-· login - User login
-· email_verified - Email verification
-· matchmaking_started - User joined queue
-· match_found - Successful match
-· message_sent - Message sent
-· user_reported - User reported
-· payment_started - Checkout initiated
-· payment_completed - Payment successful
 
 🔧 Configuration
 
-Customization Options
-
-1. Branding
-   · Colors in tailwind.config.js
-   · Logo in public/ folder
-   · Email templates in API functions
-2. Features
-   · Enable/disable image sharing
-   · Adjust matchmaking algorithm
-   · Modify content moderation rules
-3. Pricing
-   · Update prices in Lemon Squeezy
-   · Modify tier benefits in code
-   · Add new payment plans
-
 Environment Variables
 
-See .env.example for all required variables.
+Create a .env.local file in the root directory:
+
+```bash
+cp .env.example .env.local
+```
+
+Required Configuration:
+
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+# Email (Resend)
+RESEND_API_KEY=your-resend-api-key
+FROM_EMAIL=hello@yourdomain.com
+```
+
+Optional Configuration:
+
+```env
+# For Stripe payments (optional)
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your-stripe-publishable-key
+
+# For OpenAI moderation (optional)
+OPENAI_API_KEY=your-openai-api-key
+
+# For Lemon Squeezy payments (alternative)
+LEMON_SQUEEZY_API_KEY=your-lemon-squeezy-api-key
+```
+
+⚠️ Important: Never commit .env.local to version control!
+
+Required Services Setup
+
+· Supabase: Create a project at supabase.com
+· Resend: Sign up at resend.com for email functionality
+· Stripe (optional): Create an account at stripe.com
+· OpenAI (optional): Get API key from platform.openai.com
+
+📦 Scripts
+
+```bash
+# Development
+npm run dev          # Start development server
+npm run build        # Build for production
+npm start            # Start production server
+npm run lint         # Run ESLint
+npm run type-check   # Run TypeScript type checking
+
+# Testing
+npm test             # Run tests
+npm run test:watch   # Run tests in watch mode
+npm run test:coverage # Run tests with coverage
+
+# Database
+npm run db:push      # Push database migrations
+npm run db:reset     # Reset database
+npm run db:studio    # Open Supabase Studio
+
+# Code quality
+npm run format       # Format code with Prettier
+npm run analyze      # Analyze bundle size
+```
+
+🧪 Testing
+
+Unit Tests
+
+```bash
+npm test
+```
+
+Integration Tests
+
+```bash
+npm run test:integration
+```
+
+End-to-End Tests
+
+```bash
+npm run test:e2e
+```
+
+Test Coverage
+
+```bash
+npm run test:coverage
+```
+
+🚀 Deployment
+
+Deploy to Vercel (Recommended)
+
+Push your code to GitHub
+Import your repository on Vercel
+Add your environment variables in Vercel dashboard
+Deploy!
+
+Manual Deployment
+
+```bash
+# Build the application
+npm run build
+
+# Deploy to Vercel
+npx vercel --prod
+
+# Or deploy to other platforms
+npm run export  # For static export
+```
+
+Environment Variables in Production
+
+When deploying, set all required environment variables:
+
+· Vercel: Project Settings → Environment Variables
+· Netlify: Site Settings → Environment Variables
+· Railway: Settings → Variables
+
+📊 Database Setup
+
+1. Create a Supabase Project at supabase.com
+2. Run Migrations:
+
+```bash
+npx supabase db push
+```
+
+1. Configure Authentication in Supabase Dashboard
 
 🤝 Contributing
+
+Pull Request Process
 
 1. Fork the repository
 2. Create feature branch
@@ -328,53 +306,107 @@ See .env.example for all required variables.
 
 Development Guidelines
 
-· Follow TypeScript best practices
-· Write comprehensive documentation
+· Write clear commit messages
 · Add tests for new features
-· Update migration files for database changes
-
-📞 Support
-
-· Issues: GitHub Issues
-· Documentation: /docs folder
-· Community: Discord/Slack (to be created)
-· Email: Configured via Resend
+· Update documentation as needed
+· Follow the existing code style
+· Keep PRs focused on a single change
 
 📚 Documentation
 
-· Architecture - Technical architecture
-· Deployment Guide - Step-by-step deployment
-· API Reference - API documentation
+· API Reference - Complete API documentation
+· Database Schema - Table structures and relationships
+· Architecture - System design and flow
+· Deployment Guide - Production deployment instructions
+· Security - Security practices and features
 
-🎉 Launch Checklist
+🛡️ Security
 
-· Deploy to Vercel
-· Configure custom domain
-· Set up SSL certificates
-· Configure email domain
-· Set up payment products
-· Test all user flows
-· Set up monitoring
-· Create admin accounts
-· Configure backups
-· Launch! 🚀
+Security Features
+
+· Row Level Security (RLS) on all tables
+· JWT authentication with short-lived tokens
+· Rate limiting on all endpoints
+· Content moderation pipeline
+· Audit logging for sensitive operations
+· Automatic session cleanup
+
+Best Practices for Developers
+
+· Never commit secrets
+· Rotate API keys regularly
+· Use strong passwords
+· Enable 2FA
+· Keep dependencies updated
+
+❓ FAQ
+
+Is Rando Chat free?
+
+Yes! Basic features are free. Premium features (priority matching, image sharing, extended history) are available through subscription.
+
+What's the minimum age?
+
+You must be at least 18 years old to use Rando Chat.
+
+Can I use it without registering?
+
+Yes! Guest sessions allow 24-hour anonymous chatting without any registration.
+
+Is my data private?
+
+Yes. We don't sell or share personal data. Messages are encrypted, and guest sessions require no personal information.
+
+How does moderation work?
+
+We use a multi-layer system: pattern detection, keyword filtering, user history tracking, and AI analysis for flagged content.
+
+How do I get support?
+
+· Documentation: docs.randochat.com
+· GitHub Issues: Report bugs & features
+· Email: support@randochat.com
+· Discord: Join our community
 
 📄 License
 
-This project is open source. See LICENSE file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 🙏 Acknowledgments
 
-· Supabase for the amazing backend platform
-· Vercel for seamless deployment
-· Resend for reliable email delivery
-· Lemon Squeezy for simple payments
-· Cloudflare for free SSL and CDN
+· Next.js - React framework
+· Supabase - Backend as a service
+· Tailwind CSS - CSS framework
+· Vercel - Hosting platform
+· Lucide Icons - Beautiful icons
+· All our amazing contributors
+
+🚧 Roadmap
+
+v1.1.0 (Q1 2026)
+
+· Group chats (3-5 people)
+· Voice messages
+· Enhanced profile customization
+· Advanced analytics dashboard
+
+v1.2.0 (Q2 2026)
+
+· Video chat capability
+· AI conversation starters
+· Language translation
+· Mobile apps (iOS & Android)
+
+Future
+
+· Themed chat rooms
+· Achievement system
+· Third-party integrations
+· Enterprise features
 
 ---
 
-Built with ❤️ for authentic connections
+Ready to connect the world, one chat at a time. 💬
 
-Powered by free services for accessibility
+Get Started • View Demo • Report Issue
 
-Ready to connect the world, one chat at a time 💬
