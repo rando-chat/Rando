@@ -1,0 +1,225 @@
+/* app/src/styles/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* CSS Custom Properties for Design System */
+    --rando-purple: #2E235E;
+    --rando-gold: #D4AF37;
+    --rando-coral: #FB6962;
+    --rando-bg: #0f0f1a;
+    --rando-card: #1a1a2e;
+    --rando-input: #252540;
+    --rando-border: #2d2d4a;
+    
+    --text-primary: #FFFFFF;
+    --text-secondary: #B8B8D1;
+    --text-muted: #8A8AA3;
+    --text-inverse: #0F0F1A;
+    
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --info: #3B82F6;
+    
+    --gradient-primary: linear-gradient(135deg, #2E235E 0%, #4A3F8C 100%);
+    --gradient-gold: linear-gradient(135deg, #D4AF37 0%, #F4D03F 100%);
+    --gradient-card: linear-gradient(180deg, #1a1a2e 0%, #0f0f1a 100%);
+  }
+
+  body {
+    @apply bg-rando-bg text-text-primary;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-rando-card;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-rando-purple rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-rando-purple-600;
+  }
+}
+
+@layer components {
+  /* Glass Effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  .glass-card {
+    @apply bg-rando-card/80 backdrop-blur-sm border border-rando-border;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply bg-gradient-to-r from-rando-purple to-rando-purple-700 text-white font-semibold 
+           py-3 px-6 rounded-lg hover:shadow-lg hover:shadow-purple-500/25 
+           transition-all duration-200 active:scale-95;
+  }
+
+  .btn-gold {
+    @apply bg-gradient-to-r from-rando-gold to-rando-gold-600 text-rando-bg font-bold
+           py-3 px-6 rounded-lg hover:shadow-lg hover:shadow-yellow-500/25 
+           transition-all duration-200 active:scale-95;
+  }
+
+  .btn-coral {
+    @apply bg-gradient-to-r from-rando-coral to-rando-coral-600 text-white font-semibold
+           py-3 px-6 rounded-lg hover:shadow-lg hover:shadow-red-500/25 
+           transition-all duration-200 active:scale-95;
+  }
+
+  .btn-outline {
+    @apply border-2 border-rando-gold text-rando-gold font-semibold
+           py-3 px-6 rounded-lg hover:bg-rando-gold hover:text-rando-bg
+           transition-all duration-200;
+  }
+
+  /* Inputs */
+  .input-field {
+    @apply w-full bg-rando-input border border-rando-border rounded-lg 
+           px-4 py-3 text-text-primary placeholder:text-text-muted
+           focus:outline-none focus:ring-2 focus:ring-rando-gold focus:border-transparent
+           transition-all duration-200;
+  }
+
+  /* Cards */
+  .card {
+    @apply glass-card rounded-xl p-6;
+  }
+
+  .card-gold {
+    @apply card border-2 border-rando-gold shadow-lg shadow-yellow-500/10;
+  }
+
+  /* Chat Bubbles */
+  .chat-bubble-user {
+    @apply bg-gradient-to-r from-rando-purple to-rando-purple-700 text-white 
+           rounded-2xl rounded-br-none px-4 py-3 max-w-[80%] ml-auto;
+  }
+
+  .chat-bubble-partner {
+    @apply bg-rando-card border border-rando-border text-text-primary
+           rounded-2xl rounded-bl-none px-4 py-3 max-w-[80%];
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-guest {
+    @apply badge bg-gradient-to-r from-rando-purple to-rando-purple-600 text-white;
+  }
+
+  .badge-student {
+    @apply badge bg-gradient-to-r from-rando-gold to-rando-gold-600 text-rando-bg;
+  }
+
+  .badge-premium {
+    @apply badge bg-gradient-to-r from-rando-coral to-rando-coral-600 text-white;
+  }
+
+  /* Typing Indicator */
+  .typing-indicator {
+    @apply flex space-x-1;
+  }
+
+  .typing-dot {
+    @apply w-2 h-2 bg-rando-gold rounded-full opacity-60;
+  }
+
+  /* Skeleton Loading */
+  .skeleton {
+    @apply bg-gradient-to-r from-rando-input via-rando-card to-rando-input 
+           bg-[length:200%_100%] animate-shimmer;
+  }
+}
+
+@layer utilities {
+  /* Animations */
+  @keyframes gradient {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes messageSent {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes matchPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: calc(200px + 100%) 0; }
+  }
+
+  /* Text Balance */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Hide Scrollbar */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe Area Insets */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+}
