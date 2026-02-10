@@ -14,14 +14,15 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   }, [id])
   
   const handleAction = async (action: string) => {
-    // Use 'as any' to bypass the broken TypeScript types
+    // TypeScript types are broken for update() method, but runtime works
+    // @ts-expect-error - Supabase types are incorrectly typed as 'never'
     const { error } = await supabase
       .from('reports')
       .update({ 
         status: 'resolved', 
         action_taken: action,
         resolved_at: new Date().toISOString()
-      } as any)  // ← ADD 'as any' HERE
+      })
       .eq('id', id)
     
     if (error) {
