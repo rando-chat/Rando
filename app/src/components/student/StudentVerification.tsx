@@ -7,13 +7,13 @@ import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Input } from '../ui/Input';
 import Modal from '../ui/Modal';
-import { 
-  GraduationCap, 
-  CheckCircle, 
-  Shield, 
-  Clock, 
+import {
+  GraduationCap,
+  CheckCircle,
+  Shield,
+  Clock,
   Mail,
-  University,
+  School,
   BookOpen
 } from 'lucide-react';
 
@@ -133,7 +133,7 @@ const StudentVerification = ({ isVerified, university, onVerify }: StudentVerifi
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                <University className="inline h-4 w-4 mr-1" />
+                <School className="inline h-4 w-4 mr-1" />
                 Select Your University
               </label>
               <select

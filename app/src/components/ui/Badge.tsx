@@ -1,25 +1,26 @@
 import React from 'react';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'default' | 'guest' | 'student' | 'premium';
+  variant?: 'default' | 'guest' | 'student' | 'premium' | 'success';
   size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
 }
 
-export default function Badge({ 
-  variant = 'default', 
-  size = 'md', 
-  children, 
+function Badge({
+  variant = 'default',
+  size = 'md',
+  children,
   className = '',
-  ...props 
+  ...props
 }: BadgeProps) {
-  
+
   const base = "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold";
   const variants = {
     default: "bg-[#252540] text-white",
     guest: "bg-gradient-to-r from-[#2E235E] to-[#4A3F8C] text-white",
     student: "bg-gradient-to-r from-[#D4AF37] to-[#F4D03F] text-[#0F0F1A]",
     premium: "bg-gradient-to-r from-[#FB6962] to-[#FF8C7F] text-white",
+    success: "bg-[#10B981] text-white",
   };
   const sizes = {
     sm: "px-2 py-0.5 text-xs",
@@ -36,3 +37,6 @@ export default function Badge({
     </div>
   );
 }
+
+export { Badge };
+export default Badge;

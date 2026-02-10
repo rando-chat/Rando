@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { signIn, signUp } from '@/lib/supabase/auth';
 import toast from 'react-hot-toast';
-import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
-import Modal from '../../components/ui/Modal';
-import TierCard from '../../components/ui/TierCard';
+import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
+import Modal from '../components/ui/Modal';
+import TierCard from '../components/ui/TierCard';
 
 export default function LandingPage() {
   const router = useRouter();
