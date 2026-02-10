@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 import { DashboardLayout } from '@/components/admin/DashboardLayout'
 import { ReportReview } from '@/components/admin/moderation/ReportReview'
 import { ActionPanel } from '@/components/admin/moderation/ActionPanel'
-import type { Report, ReportUpdate, ReportStatus, ModerationAction } from '@/lib/supabase/client'
+import type { Report, Updates, ReportStatus, ModerationAction } from '@/lib/supabase/client'
 
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -15,7 +15,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   }, [id])
   
   const handleAction = async (action: ModerationAction) => {
-    const updateData: ReportUpdate = {
+    const updateData: Updates<'reports'> = {
       status: 'resolved' as ReportStatus,
       action_taken: action,
       resolved_at: new Date().toISOString()
