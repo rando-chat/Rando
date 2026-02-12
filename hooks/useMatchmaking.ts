@@ -27,7 +27,7 @@ export function useMatchmaking() {
     if (!userId || !mountedRef.current) return
 
     try {
-      // First check if we already have an active session (race-condition safe)
+      // First check if we already have an active session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -49,7 +49,6 @@ export function useMatchmaking() {
             : existingSession.user1_id,
         })
         setIsInQueue(false)
-        // Clean up our queue entry
         await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
         return
       }
@@ -61,22 +60,21 @@ export function useMatchmaking() {
         .eq('user_id', userId)
         .maybeSingle()
 
-      if (!myEntry) return // removed from queue externally
+      if (!myEntry) return
 
-      // Update ping so we don't get stale-purged
+      // Update last_ping
       await supabase
         .from('matchmaking_queue')
         .update({ last_ping: new Date().toISOString() })
         .eq('user_id', userId)
 
-      // Find another waiting user (not us)
-      // ORDER BY joined_at so oldest waiter gets priority - reduces race window
+      // Find partner - ORDER BY created_at (oldest first) for fairness
       const { data: candidates } = await supabase
         .from('matchmaking_queue')
         .select('*')
         .neq('user_id', userId)
         .eq('status', 'waiting')
-        .order('joined_at', { ascending: true })
+        .order('created_at', { ascending: true })
         .limit(1)
 
       if (!candidates || candidates.length === 0) {
@@ -88,21 +86,18 @@ export function useMatchmaking() {
 
       const partner = candidates[0]
 
-      // RACE CONDITION GUARD: Only the user with the "lower" userId creates the session
-      // This ensures exactly one session gets created even if both poll simultaneously
+      // Race condition guard: lower userId creates session
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
-        // Mark both as 'matched' atomically before creating session
-        const { error: updateError } = await supabase
+        // Mark both as matched
+        await supabase
           .from('matchmaking_queue')
           .update({ status: 'matched' })
           .in('user_id', [userId, partner.user_id])
-          .eq('status', 'waiting') // Only update if still 'waiting'
+          .eq('status', 'waiting')
 
-        if (updateError) return // Someone else already matched them
-
-        // Create the chat session
+        // Create session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
@@ -114,10 +109,9 @@ export function useMatchmaking() {
             started_at: new Date().toISOString(),
           })
           .select()
-          .single()
+          .maybeSingle()
 
         if (sessionError || !session) {
-          // Revert status on failure
           await supabase
             .from('matchmaking_queue')
             .update({ status: 'waiting' })
@@ -125,7 +119,7 @@ export function useMatchmaking() {
           return
         }
 
-        // Clean up queue entries
+        // Clean up queue
         await supabase.from('matchmaking_queue').delete().in('user_id', [userId, partner.user_id])
 
         if (mountedRef.current) {
@@ -138,8 +132,6 @@ export function useMatchmaking() {
           setIsInQueue(false)
         }
       }
-      // If shouldCreate=false, the other user will create — we'll pick it up next poll via existingSession check
-
     } catch (err) {
       console.error('Matchmaking error:', err)
     }
@@ -154,10 +146,10 @@ export function useMatchmaking() {
 
       myUserIdRef.current = userId
 
-      // Clean up stale entry
+      // Clean up
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Join queue
+      // Join - NO joined_at, just use created_at (auto-generated)
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
@@ -167,7 +159,6 @@ export function useMatchmaking() {
           interests: params.interests || [],
           status: 'waiting',
           display_name: params.displayName || 'Anonymous',
-          joined_at: new Date().toISOString(),
           last_ping: new Date().toISOString(),
         })
 
@@ -175,10 +166,7 @@ export function useMatchmaking() {
 
       setIsInQueue(true)
       setEstimatedWait(30)
-
-      // Poll every 2s
       pollingRef.current = setInterval(checkForMatch, 2000)
-      // Check immediately
       setTimeout(checkForMatch, 300)
 
     } catch (err: any) {
