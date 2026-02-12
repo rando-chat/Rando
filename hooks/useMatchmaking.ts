@@ -22,6 +22,15 @@ export function useMatchmaking() {
     }
   }, [])
 
+  // Generate a proper UUID v4 for guests
+  const generateGuestUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+  }
+
   const checkForMatch = useCallback(async () => {
     const userId = myUserIdRef.current
     if (!userId || !mountedRef.current) return
@@ -51,7 +60,7 @@ export function useMatchmaking() {
         return
       }
 
-      // Check we're still in queue (matched_at IS NULL means waiting)
+      // Check we're still in queue
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
         .select('user_id, display_name')
@@ -61,7 +70,7 @@ export function useMatchmaking() {
 
       if (!myEntry) return
 
-      // Find partner (also waiting, matched_at IS NULL)
+      // Find partner
       const { data: candidates } = await supabase
         .from('matchmaking_queue')
         .select('user_id, display_name')
@@ -83,7 +92,7 @@ export function useMatchmaking() {
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
-        // Mark both as matched (set matched_at timestamp)
+        // Mark both as matched
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
@@ -128,7 +137,14 @@ export function useMatchmaking() {
     setIsLoading(true)
     setError(null)
     try {
-      const userId = getUserId() || params.userId
+      let userId = getUserId()
+      
+      // If no user ID (not logged in), generate a proper UUID for guest
+      if (!userId) {
+        userId = generateGuestUUID()
+        console.log('Generated guest UUID:', userId)
+      }
+
       if (!userId) throw new Error('No user ID')
 
       myUserIdRef.current = userId
@@ -136,16 +152,16 @@ export function useMatchmaking() {
       // Clean up any existing entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Insert - NO status column, use matched_at = NULL for "waiting"
+      // Insert with proper UUID
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
-          user_id: userId,
+          user_id: userId, // Now a proper UUID
           display_name: params.displayName || 'Anonymous',
-          is_guest: isGuest || !getUserId(),
+          is_guest: !getUserId(), // True if we generated UUID
           tier: params.tier || 'free',
           interests: params.interests || [],
-          matched_at: null, // NULL = waiting
+          matched_at: null,
           entered_at: new Date().toISOString(),
         })
 
