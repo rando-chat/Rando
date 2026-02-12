@@ -6,8 +6,11 @@ import { AvatarUploader } from '@/components/profile/AvatarUploader'
 import { InterestsManager } from '@/components/profile/InterestsManager'
 import { TierDisplay } from '@/components/profile/TierDisplay'
 import { StudentVerification } from '@/components/profile/StudentVerification'
+import { useAuth } from '@/components/auth/AuthProvider'
 
 export default function ProfileSettings() {
+  const { dbUser } = useAuth()
+
   return (
     <SettingsLayout>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -17,7 +20,7 @@ export default function ProfileSettings() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <TierDisplay />
+          {dbUser && <TierDisplay tier={dbUser.tier as any} showUpgrade={true} />}
           <StudentVerification />
           <AvatarUploader />
           <ProfileEditor />
