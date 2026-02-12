@@ -81,7 +81,7 @@ export function useMatchmaking() {
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
-        // Create session immediately
+        // Create session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
@@ -122,15 +122,26 @@ export function useMatchmaking() {
 
       myUserIdRef.current = userId
 
-      // Clean up
+      // Clean up any existing entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Minimal insert - just user_id
+      // Insert with ALL required fields explicitly set to avoid NOT NULL errors
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
-        .insert({ user_id: userId })
+        .insert({
+          user_id: userId,
+          display_name: params.displayName || 'Anonymous',
+          status: 'waiting',
+          is_guest: isGuest || !getUserId(),
+          user_tier: params.tier || 'free',
+          interests: params.interests || [],
+          last_ping: new Date().toISOString(),
+        })
 
-      if (insertError) throw insertError
+      if (insertError) {
+        console.error('Insert error:', insertError)
+        throw insertError
+      }
 
       setIsInQueue(true)
       setEstimatedWait(30)
