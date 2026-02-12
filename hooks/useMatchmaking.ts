@@ -27,7 +27,7 @@ export function useMatchmaking() {
     if (!userId || !mountedRef.current) return
 
     try {
-      // First check if we already have an active session
+      // Check if we already have an active session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -41,11 +41,9 @@ export function useMatchmaking() {
         if (pollingRef.current) clearInterval(pollingRef.current)
         setMatchFound({
           session_id: existingSession.id,
-          match_display_name: existingSession.user1_id === userId
-            ? (existingSession.user2_display_name || 'Anonymous')
-            : (existingSession.user1_display_name || 'Anonymous'),
-          match_user_id: existingSession.user1_id === userId
-            ? existingSession.user2_id
+          match_display_name: 'your match',
+          match_user_id: existingSession.user1_id === userId 
+            ? existingSession.user2_id 
             : existingSession.user1_id,
         })
         setIsInQueue(false)
@@ -56,18 +54,17 @@ export function useMatchmaking() {
       // Check we're still in queue
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
-        .select('*')
+        .select('user_id')
         .eq('user_id', userId)
         .maybeSingle()
 
       if (!myEntry) return
 
-      // Find partner - ORDER BY created_at (oldest first)
+      // Find partner
       const { data: candidates } = await supabase
         .from('matchmaking_queue')
-        .select('*')
+        .select('user_id')
         .neq('user_id', userId)
-        .eq('status', 'waiting')
         .order('created_at', { ascending: true })
         .limit(1)
 
@@ -80,38 +77,23 @@ export function useMatchmaking() {
 
       const partner = candidates[0]
 
-      // Race condition guard: lower userId creates session
+      // Race condition guard
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
-        // Mark both as matched
-        await supabase
-          .from('matchmaking_queue')
-          .update({ status: 'matched' })
-          .in('user_id', [userId, partner.user_id])
-          .eq('status', 'waiting')
-
-        // Create session
+        // Create session immediately
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
             user1_id: userId,
             user2_id: partner.user_id,
-            user1_display_name: myEntry.display_name || 'Anonymous',
-            user2_display_name: partner.display_name || 'Anonymous',
             status: 'active',
             started_at: new Date().toISOString(),
           })
           .select()
           .maybeSingle()
 
-        if (sessionError || !session) {
-          await supabase
-            .from('matchmaking_queue')
-            .update({ status: 'waiting' })
-            .in('user_id', [userId, partner.user_id])
-          return
-        }
+        if (sessionError || !session) return
 
         // Clean up queue
         await supabase.from('matchmaking_queue').delete().in('user_id', [userId, partner.user_id])
@@ -120,7 +102,7 @@ export function useMatchmaking() {
           if (pollingRef.current) clearInterval(pollingRef.current)
           setMatchFound({
             session_id: session.id,
-            match_display_name: partner.display_name || 'Anonymous',
+            match_display_name: 'Anonymous',
             match_user_id: partner.user_id,
           })
           setIsInQueue(false)
@@ -128,10 +110,6 @@ export function useMatchmaking() {
       }
     } catch (err: any) {
       console.error('Matchmaking error:', err)
-      // Don't show error to user for missing columns - just log it
-      if (err.message && !err.message.includes('column')) {
-        setError(err.message)
-      }
     }
   }, [])
 
@@ -147,36 +125,12 @@ export function useMatchmaking() {
       // Clean up
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Build insert object - only include fields that exist
-      const insertData: any = {
-        user_id: userId,
-        is_guest: isGuest || !getUserId(),
-        user_tier: params.tier || 'free',
-        interests: params.interests || [],
-        status: 'waiting',
-      }
-
-      // Conditionally add display_name if column exists
-      if (params.displayName) {
-        insertData.display_name = params.displayName
-      }
-
+      // Minimal insert - just user_id
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
-        .insert(insertData)
+        .insert({ user_id: userId })
 
-      if (insertError) {
-        // If error is about missing column, try without it
-        if (insertError.message.includes('column')) {
-          delete insertData.display_name
-          const { error: retryError } = await supabase
-            .from('matchmaking_queue')
-            .insert(insertData)
-          if (retryError) throw retryError
-        } else {
-          throw insertError
-        }
-      }
+      if (insertError) throw insertError
 
       setIsInQueue(true)
       setEstimatedWait(30)
@@ -185,6 +139,7 @@ export function useMatchmaking() {
 
     } catch (err: any) {
       setError(err.message || 'Failed to join queue')
+      console.error('Join queue error:', err)
     } finally {
       setIsLoading(false)
     }
