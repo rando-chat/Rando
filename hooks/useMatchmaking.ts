@@ -62,13 +62,7 @@ export function useMatchmaking() {
 
       if (!myEntry) return
 
-      // Update last_ping
-      await supabase
-        .from('matchmaking_queue')
-        .update({ last_ping: new Date().toISOString() })
-        .eq('user_id', userId)
-
-      // Find partner - ORDER BY created_at (oldest first) for fairness
+      // Find partner - ORDER BY created_at (oldest first)
       const { data: candidates } = await supabase
         .from('matchmaking_queue')
         .select('*')
@@ -132,8 +126,12 @@ export function useMatchmaking() {
           setIsInQueue(false)
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Matchmaking error:', err)
+      // Don't show error to user for missing columns - just log it
+      if (err.message && !err.message.includes('column')) {
+        setError(err.message)
+      }
     }
   }, [])
 
@@ -149,20 +147,36 @@ export function useMatchmaking() {
       // Clean up
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Join - NO joined_at, just use created_at (auto-generated)
+      // Build insert object - only include fields that exist
+      const insertData: any = {
+        user_id: userId,
+        is_guest: isGuest || !getUserId(),
+        user_tier: params.tier || 'free',
+        interests: params.interests || [],
+        status: 'waiting',
+      }
+
+      // Conditionally add display_name if column exists
+      if (params.displayName) {
+        insertData.display_name = params.displayName
+      }
+
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
-        .insert({
-          user_id: userId,
-          is_guest: isGuest || !getUserId(),
-          user_tier: params.tier || 'free',
-          interests: params.interests || [],
-          status: 'waiting',
-          display_name: params.displayName || 'Anonymous',
-          last_ping: new Date().toISOString(),
-        })
+        .insert(insertData)
 
-      if (insertError) throw new Error(insertError.message)
+      if (insertError) {
+        // If error is about missing column, try without it
+        if (insertError.message.includes('column')) {
+          delete insertData.display_name
+          const { error: retryError } = await supabase
+            .from('matchmaking_queue')
+            .insert(insertData)
+          if (retryError) throw retryError
+        } else {
+          throw insertError
+        }
+      }
 
       setIsInQueue(true)
       setEstimatedWait(30)
