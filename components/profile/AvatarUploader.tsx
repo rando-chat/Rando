@@ -1,84 +1,210 @@
 'use client'
-
 import { useState, useRef } from 'react'
-import { Upload, User, Loader2 } from 'lucide-react'
-import { useUpload } from '@/hooks/useUpload'
+import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/components/auth/AuthProvider'
 
-export function AvatarUploader({ currentUrl, onUpload }: { currentUrl?: string | null; onUpload: (url: string) => void }) {
+export function AvatarUploader() {
+  const { dbUser, refreshUserProfile } = useAuth()
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { upload, isUploading } = useUpload()
-  const [preview, setPreview] = useState(currentUrl)
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true)
+      setError('')
 
-    // Validate file
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
-      return
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.')
+      }
+
+      const file = event.target.files[0]
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${dbUser!.id}-${Math.random()}.${fileExt}`
+      const filePath = `${dbUser!.id}/${fileName}`
+
+      // Check file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('File size must be less than 5MB')
+      }
+
+      // Check file type
+      if (!['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+        throw new Error('File must be an image (JPG, PNG, GIF, or WebP)')
+      }
+
+      // Upload to Supabase Storage
+      const { error: uploadError, data } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      // Update user profile with new avatar URL
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', dbUser!.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // Refresh user profile
+      if (refreshUserProfile) {
+        await refreshUserProfile()
+      }
+
+    } catch (error: any) {
+      setError(error.message)
+      console.error('Error uploading avatar:', error)
+    } finally {
+      setUploading(false)
     }
+  }
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB')
-      return
-    }
+  const removeAvatar = async () => {
+    try {
+      setUploading(true)
+      setError('')
 
-    // Show preview
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setPreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
+      // Update profile to remove avatar
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: null })
+        .eq('id', dbUser!.id)
 
-    // Upload
-    const url = await upload(file, 'avatars')
-    if (url) {
-      onUpload(url)
+      if (updateError) {
+        throw updateError
+      }
+
+      // Optionally delete from storage
+      if (dbUser?.avatar_url) {
+        const path = dbUser.avatar_url.split('/avatars/')[1]
+        if (path) {
+          await supabase.storage.from('avatars').remove([path])
+        }
+      }
+
+      if (refreshUserProfile) {
+        await refreshUserProfile()
+      }
+
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setUploading(false)
     }
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative">
-        {preview ? (
-          <img
-            src={preview}
-            alt="Avatar"
-            className="w-24 h-24 rounded-full object-cover border-4 border-gray-200"
+    <div style={{ padding: '24px', background: 'white', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Profile Picture</h3>
+      
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        {/* Avatar Preview */}
+        <div style={{
+          width: 120,
+          height: 120,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          background: dbUser?.avatar_url ? 'transparent' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 48,
+          color: 'white',
+          fontWeight: 700,
+        }}>
+          {dbUser?.avatar_url ? (
+            <img 
+              src={dbUser.avatar_url} 
+              alt="Avatar" 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            dbUser?.display_name?.[0]?.toUpperCase() || '?'
+          )}
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={uploadAvatar}
+            disabled={uploading}
+            style={{ display: 'none' }}
           />
-        ) : (
-          <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center border-4 border-gray-200">
-            <User className="w-12 h-12 text-gray-400" />
-          </div>
-        )}
+          
+          <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                padding: '10px 20px',
+                background: uploading ? '#d1d5db' : '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: uploading ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {uploading ? 'Uploading...' : dbUser?.avatar_url ? 'Change Photo' : 'Upload Photo'}
+            </button>
 
-        {isUploading && (
-          <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
-            <Loader2 className="w-8 h-8 text-white animate-spin" />
+            {dbUser?.avatar_url && (
+              <button
+                onClick={removeAvatar}
+                disabled={uploading}
+                style={{
+                  padding: '10px 20px',
+                  background: 'transparent',
+                  color: '#ef4444',
+                  border: '1px solid #fecaca',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Remove
+              </button>
+            )}
           </div>
-        )}
-      </div>
 
-      <div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-        >
-          <Upload className="w-4 h-4" />
-          Upload Photo
-        </button>
-        <p className="text-xs text-gray-500 mt-1">
-          JPG, PNG or GIF. Max 5MB.
-        </p>
+          <p style={{ fontSize: 12, color: '#6b7280', margin: 0 }}>
+            JPG, PNG, GIF or WebP. Max 5MB.
+          </p>
+
+          {error && (
+            <div style={{
+              marginTop: 12,
+              padding: '8px 12px',
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 6,
+              color: '#ef4444',
+              fontSize: 13,
+            }}>
+              {error}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
