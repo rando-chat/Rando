@@ -51,21 +51,23 @@ export function useMatchmaking() {
         return
       }
 
-      // Check we're still in queue
+      // Check we're still in queue (matched_at IS NULL means waiting)
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
-        .select('user_id')
+        .select('user_id, display_name')
         .eq('user_id', userId)
+        .is('matched_at', null)
         .maybeSingle()
 
       if (!myEntry) return
 
-      // Find partner
+      // Find partner (also waiting, matched_at IS NULL)
       const { data: candidates } = await supabase
         .from('matchmaking_queue')
-        .select('user_id')
+        .select('user_id, display_name')
         .neq('user_id', userId)
-        .order('created_at', { ascending: true })
+        .is('matched_at', null)
+        .order('entered_at', { ascending: true })
         .limit(1)
 
       if (!candidates || candidates.length === 0) {
@@ -81,12 +83,21 @@ export function useMatchmaking() {
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
+        // Mark both as matched (set matched_at timestamp)
+        await supabase
+          .from('matchmaking_queue')
+          .update({ matched_at: new Date().toISOString() })
+          .in('user_id', [userId, partner.user_id])
+          .is('matched_at', null)
+
         // Create session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
             user1_id: userId,
             user2_id: partner.user_id,
+            user1_display_name: myEntry.display_name || 'Anonymous',
+            user2_display_name: partner.display_name || 'Anonymous',
             status: 'active',
             started_at: new Date().toISOString(),
           })
@@ -102,7 +113,7 @@ export function useMatchmaking() {
           if (pollingRef.current) clearInterval(pollingRef.current)
           setMatchFound({
             session_id: session.id,
-            match_display_name: 'Anonymous',
+            match_display_name: partner.display_name || 'Anonymous',
             match_user_id: partner.user_id,
           })
           setIsInQueue(false)
@@ -125,17 +136,17 @@ export function useMatchmaking() {
       // Clean up any existing entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Insert with ALL required fields explicitly set to avoid NOT NULL errors
+      // Insert - NO status column, use matched_at = NULL for "waiting"
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
           user_id: userId,
           display_name: params.displayName || 'Anonymous',
-          status: 'waiting',
           is_guest: isGuest || !getUserId(),
-          user_tier: params.tier || 'free',
+          tier: params.tier || 'free',
           interests: params.interests || [],
-          last_ping: new Date().toISOString(),
+          matched_at: null, // NULL = waiting
+          entered_at: new Date().toISOString(),
         })
 
       if (insertError) {
