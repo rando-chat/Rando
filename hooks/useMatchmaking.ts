@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/components/auth/AuthProvider'
 
 export function useMatchmaking() {
-  const { getUserId, isGuest } = useAuth()
+  const { getUserId } = useAuth()
   const [isInQueue, setIsInQueue] = useState(false)
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [matchFound, setMatchFound] = useState<any>(null)
@@ -22,7 +22,6 @@ export function useMatchmaking() {
     }
   }, [])
 
-  // Generate a proper UUID v4 for guests
   const generateGuestUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0
@@ -36,7 +35,9 @@ export function useMatchmaking() {
     if (!userId || !mountedRef.current) return
 
     try {
-      // Check if we already have an active session
+      console.log('[Matchmaking] Checking for match, userId:', userId)
+
+      // FIRST: Check if we already got matched (someone else created session)
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -46,11 +47,12 @@ export function useMatchmaking() {
         .limit(1)
         .maybeSingle()
 
-      if (existingSession && mountedRef.current) {
+      if (existingSession) {
+        console.log('[Matchmaking] Found existing session:', existingSession.id)
         if (pollingRef.current) clearInterval(pollingRef.current)
         setMatchFound({
           session_id: existingSession.id,
-          match_display_name: 'your match',
+          match_display_name: 'Anonymous',
           match_user_id: existingSession.user1_id === userId 
             ? existingSession.user2_id 
             : existingSession.user1_id,
@@ -60,46 +62,68 @@ export function useMatchmaking() {
         return
       }
 
-      // Check we're still in queue
+      // Check if we're still in queue
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
-        .select('user_id, display_name')
+        .select('*')
         .eq('user_id', userId)
         .is('matched_at', null)
         .maybeSingle()
 
-      if (!myEntry) return
+      if (!myEntry) {
+        console.log('[Matchmaking] Not in queue anymore')
+        return
+      }
 
-      // Find partner
-      const { data: candidates } = await supabase
+      console.log('[Matchmaking] Still in queue, looking for partner...')
+
+      // Find ANY other person waiting
+      const { data: allCandidates } = await supabase
         .from('matchmaking_queue')
-        .select('user_id, display_name')
-        .neq('user_id', userId)
+        .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
-        .limit(1)
 
-      if (!candidates || candidates.length === 0) {
+      console.log('[Matchmaking] Total people in queue:', allCandidates?.length || 0)
+      
+      if (allCandidates) {
+        allCandidates.forEach((c, i) => {
+          console.log(`  [${i}] user_id: ${c.user_id} ${c.user_id === userId ? '(ME)' : ''}`)
+        })
+      }
+
+      // Find partner (not me)
+      const partner = allCandidates?.find(c => c.user_id !== userId)
+
+      if (!partner) {
+        console.log('[Matchmaking] No partner found yet')
         if (mountedRef.current) {
           setEstimatedWait(prev => Math.max(5, prev - 2))
         }
         return
       }
 
-      const partner = candidates[0]
+      console.log('[Matchmaking] Found partner:', partner.user_id)
 
-      // Race condition guard
-      const shouldCreate = userId < partner.user_id
+      // SIMPLE: Always let the first user alphabetically create the session
+      const iAmFirst = userId < partner.user_id
+      console.log('[Matchmaking] Should I create session?', iAmFirst)
 
-      if (shouldCreate) {
-        // Mark both as matched
-        await supabase
+      if (iAmFirst) {
+        console.log('[Matchmaking] Creating session...')
+
+        // Mark BOTH as matched FIRST
+        const { error: updateError } = await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
           .in('user_id', [userId, partner.user_id])
-          .is('matched_at', null)
 
-        // Create session
+        if (updateError) {
+          console.error('[Matchmaking] Error updating queue:', updateError)
+          return
+        }
+
+        // Create chat session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
@@ -111,9 +135,19 @@ export function useMatchmaking() {
             started_at: new Date().toISOString(),
           })
           .select()
-          .maybeSingle()
+          .single()
 
-        if (sessionError || !session) return
+        if (sessionError) {
+          console.error('[Matchmaking] Error creating session:', sessionError)
+          // Revert matched_at
+          await supabase
+            .from('matchmaking_queue')
+            .update({ matched_at: null })
+            .in('user_id', [userId, partner.user_id])
+          return
+        }
+
+        console.log('[Matchmaking] Session created:', session.id)
 
         // Clean up queue
         await supabase.from('matchmaking_queue').delete().in('user_id', [userId, partner.user_id])
@@ -127,9 +161,11 @@ export function useMatchmaking() {
           })
           setIsInQueue(false)
         }
+      } else {
+        console.log('[Matchmaking] Waiting for partner to create session...')
       }
     } catch (err: any) {
-      console.error('Matchmaking error:', err)
+      console.error('[Matchmaking] Error:', err)
     }
   }, [])
 
@@ -139,26 +175,24 @@ export function useMatchmaking() {
     try {
       let userId = getUserId()
       
-      // If no user ID (not logged in), generate a proper UUID for guest
       if (!userId) {
         userId = generateGuestUUID()
-        console.log('Generated guest UUID:', userId)
+        console.log('[Matchmaking] Generated guest UUID:', userId)
       }
-
-      if (!userId) throw new Error('No user ID')
 
       myUserIdRef.current = userId
 
-      // Clean up any existing entry
+      // Clean up
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Insert with proper UUID
+      console.log('[Matchmaking] Joining queue...')
+
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
-          user_id: userId, // Now a proper UUID
+          user_id: userId,
           display_name: params.displayName || 'Anonymous',
-          is_guest: !getUserId(), // True if we generated UUID
+          is_guest: !getUserId(),
           tier: params.tier || 'free',
           interests: params.interests || [],
           matched_at: null,
@@ -166,18 +200,20 @@ export function useMatchmaking() {
         })
 
       if (insertError) {
-        console.error('Insert error:', insertError)
+        console.error('[Matchmaking] Insert error:', insertError)
         throw insertError
       }
+
+      console.log('[Matchmaking] Joined queue successfully')
 
       setIsInQueue(true)
       setEstimatedWait(30)
       pollingRef.current = setInterval(checkForMatch, 2000)
-      setTimeout(checkForMatch, 300)
+      setTimeout(checkForMatch, 500)
 
     } catch (err: any) {
       setError(err.message || 'Failed to join queue')
-      console.error('Join queue error:', err)
+      console.error('[Matchmaking] Join error:', err)
     } finally {
       setIsLoading(false)
     }
@@ -185,6 +221,7 @@ export function useMatchmaking() {
 
   const leaveQueue = async () => {
     const userId = myUserIdRef.current || getUserId()
+    console.log('[Matchmaking] Leaving queue...')
     if (pollingRef.current) clearInterval(pollingRef.current)
     if (userId) await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
     setIsInQueue(false)
