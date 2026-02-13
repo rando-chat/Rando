@@ -35,7 +35,6 @@ export function useMatchmaking() {
     if (!userId || !mountedRef.current) return
 
     try {
-      // Check for existing session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -59,7 +58,6 @@ export function useMatchmaking() {
         return
       }
 
-      // Check queue - using exact column names from your schema
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
         .select('user_id, display_name')
@@ -69,7 +67,6 @@ export function useMatchmaking() {
 
       if (!myEntry) return
 
-      // Find partner - using entered_at (not joined_at)
       const { data: allCandidates } = await supabase
         .from('matchmaking_queue')
         .select('user_id, display_name')
@@ -85,18 +82,15 @@ export function useMatchmaking() {
         return
       }
 
-      // Race condition guard
       const shouldCreate = userId < partner.user_id
 
       if (shouldCreate) {
-        // Mark matched
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
           .in('user_id', [userId, partner.user_id])
           .is('matched_at', null)
 
-        // Create session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
@@ -112,7 +106,6 @@ export function useMatchmaking() {
 
         if (sessionError || !session) return
 
-        // Clean up
         await supabase.from('matchmaking_queue').delete().in('user_id', [userId, partner.user_id])
 
         if (mountedRef.current) {
@@ -141,11 +134,8 @@ export function useMatchmaking() {
       }
 
       myUserIdRef.current = userId
-
-      // Clean up
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
-      // Insert - using EXACT column names from your schema
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
@@ -155,8 +145,6 @@ export function useMatchmaking() {
           tier: params.tier || 'free',
           interests: params.interests || [],
           matched_at: null,
-          // Using entered_at (auto-generated with default now())
-          // NOT including last_ping or last_ping_at - both auto-generated
         })
 
       if (insertError) {
