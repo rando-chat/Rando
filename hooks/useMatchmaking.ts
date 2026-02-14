@@ -1,324 +1,180 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useAuth } from '@/components/auth/AuthProvider'
 
 export function useMatchmaking() {
-  const { getUserId } = useAuth()
+  const [session, setSession] = useState<any>(null)  // Store entire session object
   const [isInQueue, setIsInQueue] = useState(false)
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [matchFound, setMatchFound] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const mountedRef = useRef(true)
-  const myUserIdRef = useRef<string | null>(null)
-  const visibilityHandlerRef = useRef<(() => void) | null>(null)
-  const onlineHandlerRef = useRef<(() => void) | null>(null)
 
+  // Initialize guest session on mount
   useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      if (pollingRef.current) clearInterval(pollingRef.current)
-      
-      // Cleanup event listeners
-      if (visibilityHandlerRef.current) {
-        document.removeEventListener('visibilitychange', visibilityHandlerRef.current)
+    const initialize = async () => {
+      try {
+        const { data, error } = await supabase.rpc('create_guest_session', {
+          p_ip_address: null,
+          p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          p_country_code: null
+        })
+
+        if (error) throw error
+        if (data && data.length > 0) {
+          setSession(data[0])
+        }
+      } catch (err: any) {
+        console.error('Init error:', err)
+        setError(err.message)
       }
-      if (onlineHandlerRef.current) {
-        window.removeEventListener('online', onlineHandlerRef.current)
+    }
+
+    initialize()
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
+      if (session?.guest_id) {
+        supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
       }
     }
   }, [])
 
-  const generateUUID = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0
-      const v = c === 'x' ? r : (r & 0x3 | 0x8)
-      return v.toString(16)
-    })
+  const startPolling = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current)
+    setTimeout(() => checkForMatch(), 100)
+    pollingRef.current = setInterval(checkForMatch, 500)
   }
 
-  // PRO TIP 1: Clean up stale queue entries
-  const cleanupStaleQueueEntries = async () => {
-    try {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
-      await supabase
-        .from('matchmaking_queue')
-        .delete()
-        .lt('entered_at', fiveMinutesAgo)
-      
-      console.log('[Matchmaking] Cleaned up stale queue entries')
-    } catch (err) {
-      console.error('[Matchmaking] Cleanup error:', err)
-    }
-  }
-
-  const checkForMatch = useCallback(async () => {
-    const userId = myUserIdRef.current
-    if (!userId || !mountedRef.current) return
+  const checkForMatch = async () => {
+    if (!session) return
 
     try {
-      // Check if we already have an active session
+      // Check for existing session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
-        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+        .or(`user1_id.eq.${session.guest_id},user2_id.eq.${session.guest_id}`)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
         .maybeSingle()
 
       if (existingSession) {
-        console.log('[Matchmaking] Found existing session:', existingSession.id)
         if (pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
         }
-        
-        setMatchFound({
-          session_id: existingSession.id,
-          match_display_name: existingSession.user1_id === userId 
-            ? (existingSession.user2_display_name || 'Anonymous')
-            : (existingSession.user1_display_name || 'Anonymous'),
-          match_user_id: existingSession.user1_id === userId 
-            ? existingSession.user2_id 
-            : existingSession.user1_id,
-        })
+        setMatchFound(existingSession)
         setIsInQueue(false)
-        await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
         return
       }
 
-      // Check we're still in queue
+      // Check if in queue
       const { data: myEntry } = await supabase
         .from('matchmaking_queue')
-        .select('user_id, display_name')
-        .eq('user_id', userId)
+        .select('*')
+        .eq('user_id', session.guest_id)
         .is('matched_at', null)
         .maybeSingle()
 
-      if (!myEntry) {
-        console.log('[Matchmaking] Not in queue anymore')
-        return
-      }
+      const amIInQueue = !!myEntry
+      if (amIInQueue !== isInQueue) setIsInQueue(amIInQueue)
+      if (!amIInQueue) return
 
-      // Find all candidates in queue
-      const { data: allCandidates } = await supabase
+      // Get queue
+      const { data: queue } = await supabase
         .from('matchmaking_queue')
-        .select('user_id, display_name, entered_at')
+        .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      console.log('[Matchmaking] Total in queue:', allCandidates?.length || 0)
-
-      const partner = allCandidates?.find(c => c.user_id !== userId)
-
-      if (!partner) {
-        if (mountedRef.current) {
-          setEstimatedWait(prev => Math.max(5, prev - 2))
-        }
+      if (!queue || queue.length < 2) {
+        setEstimatedWait(prev => Math.max(5, prev - 1))
         return
       }
 
-      console.log('[Matchmaking] Found partner:', partner.user_id.slice(0, 8))
+      const partner = queue.find(u => u.user_id !== session.guest_id)
+      if (!partner) return
 
-      // Race condition guard: lower user_id creates session
-      const shouldCreate = userId < partner.user_id
-      console.log('[Matchmaking] Should I create?', shouldCreate)
-
-      if (shouldCreate) {
-        console.log('[Matchmaking] Creating session...')
-
-        // Mark both as matched
+      // Create session if I should
+      if (session.guest_id < partner.user_id) {
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
-          .in('user_id', [userId, partner.user_id])
-          .is('matched_at', null)
+          .in('user_id', [session.guest_id, partner.user_id])
 
-        // Create session
-        const { data: session, error: sessionError } = await supabase
+        const { data: newSession } = await supabase
           .from('chat_sessions')
           .insert({
-            user1_id: userId,
+            user1_id: session.guest_id,
             user2_id: partner.user_id,
-            user1_display_name: myEntry.display_name || 'Anonymous',
-            user2_display_name: partner.display_name || 'Anonymous',
+            user1_display_name: session.display_name,
+            user2_display_name: partner.display_name,
             status: 'active',
-            started_at: new Date().toISOString(),
+            started_at: new Date().toISOString()
           })
           .select()
-          .maybeSingle()
+          .single()
 
-        if (sessionError || !session) {
-          console.error('[Matchmaking] Session creation failed:', sessionError)
-          // Revert matched status
-          await supabase
-            .from('matchmaking_queue')
-            .update({ matched_at: null })
-            .in('user_id', [userId, partner.user_id])
-          return
-        }
-
-        console.log('[Matchmaking] Session created:', session.id)
-
-        // Clean up queue
-        await supabase.from('matchmaking_queue').delete().in('user_id', [userId, partner.user_id])
-
-        if (mountedRef.current) {
+        if (newSession) {
+          await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
           if (pollingRef.current) {
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
-          setMatchFound({
-            session_id: session.id,
-            match_display_name: partner.display_name || 'Anonymous',
-            match_user_id: partner.user_id,
-          })
+          setMatchFound(newSession)
           setIsInQueue(false)
         }
       } else {
-        console.log('[Matchmaking] Waiting for partner to create session...')
+        setEstimatedWait(prev => Math.max(5, prev - 1))
       }
     } catch (err: any) {
-      console.error('[Matchmaking] Error:', err)
+      console.error('Match error:', err)
     }
-  }, [])
+  }
 
-  // ============================================================================
-  // PRO TIP 2: Enterprise-Grade Aggressive Polling
-  // ============================================================================
-  const startMatchPolling = useCallback(() => {
-    console.log('[Matchmaking] Starting aggressive polling...')
-    
-    // Clear any existing polling first (prevent memory leaks)
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
+  const joinQueue = async () => {
+    if (!session) return
 
-    // Layer 1: Immediate check (100ms - catches instant matches)
-    setTimeout(() => {
-      if (mountedRef.current) {
-        console.log('[Matchmaking] Layer 1: Immediate check')
-        checkForMatch()
-      }
-    }, 100)
-
-    // Layer 2: Aggressive polling (1 second intervals - 2x faster than standard)
-    pollingRef.current = setInterval(() => {
-      if (mountedRef.current) {
-        checkForMatch()
-      }
-    }, 1000)
-
-    // Layer 3: Visibility API (check when user returns to tab)
-    visibilityHandlerRef.current = () => {
-      if (document.visibilityState === 'visible' && isInQueue && mountedRef.current) {
-        console.log('[Matchmaking] Layer 3: Visibility change - checking')
-        checkForMatch()
-      }
-    }
-    document.addEventListener('visibilitychange', visibilityHandlerRef.current)
-
-    // Layer 4: Network status (check when connection resumes)
-    onlineHandlerRef.current = () => {
-      if (isInQueue && mountedRef.current) {
-        console.log('[Matchmaking] Layer 4: Network reconnected - checking')
-        checkForMatch()
-      }
-    }
-    window.addEventListener('online', onlineHandlerRef.current)
-
-    console.log('[Matchmaking] All polling layers active')
-  }, [checkForMatch, isInQueue])
-
-  const joinQueue = async (params: any) => {
     setIsLoading(true)
     setError(null)
     
     try {
-      // PRO TIP 1: Clean up stale entries before joining
-      await cleanupStaleQueueEntries()
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
-      let userId = getUserId()
-      
-      if (!userId) {
-        userId = generateUUID()
-        console.log('[Matchmaking] Generated guest UUID:', userId)
-      }
-
-      myUserIdRef.current = userId
-
-      // Clean up any existing entry for this user
-      await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
-
-      console.log('[Matchmaking] Joining queue...')
-
-      // Insert into queue
-      const { error: insertError } = await supabase
-        .from('matchmaking_queue')
-        .insert({
-          user_id: userId,
-          display_name: params.displayName || 'Anonymous',
-          is_guest: !getUserId(),
-          tier: params.tier || 'free',
-          interests: params.interests || [],
-          matched_at: null,
-          entered_at: new Date().toISOString(),
-        })
-
-      if (insertError) {
-        console.error('[Matchmaking] Insert error:', insertError)
-        throw insertError
-      }
-
-      console.log('[Matchmaking] Joined queue successfully')
+      await supabase.from('matchmaking_queue').insert({
+        user_id: session.guest_id,
+        display_name: session.display_name,
+        is_guest: true,
+        tier: 'free',
+        interests: [],
+        entered_at: new Date().toISOString()
+      })
 
       setIsInQueue(true)
       setEstimatedWait(30)
-      
-      // PRO TIP 2: Start aggressive multi-layer polling
-      startMatchPolling()
-
+      startPolling()
     } catch (err: any) {
-      setError(err.message || 'Failed to join queue')
-      console.error('[Matchmaking] Join error:', err)
+      setError(err.message)
     } finally {
       setIsLoading(false)
     }
   }
 
   const leaveQueue = async () => {
-    const userId = myUserIdRef.current || getUserId()
-    console.log('[Matchmaking] Leaving queue...')
-    
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-
-    // Remove event listeners
-    if (visibilityHandlerRef.current) {
-      document.removeEventListener('visibilitychange', visibilityHandlerRef.current)
-      visibilityHandlerRef.current = null
+    if (session) {
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
-    if (onlineHandlerRef.current) {
-      window.removeEventListener('online', onlineHandlerRef.current)
-      onlineHandlerRef.current = null
-    }
-    
-    if (userId) {
-      await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
-    }
-    
     setIsInQueue(false)
-    setMatchFound(null)
+    setEstimatedWait(30)
   }
 
   return {
+    session,  // Return entire session object
     isInQueue,
     queuePosition: 1,
     estimatedWait,
