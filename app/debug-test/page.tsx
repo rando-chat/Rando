@@ -18,6 +18,14 @@ export default function SimpleDebugPage() {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
   }
 
+  // Auto-subscribe when entering chat
+  useEffect(() => {
+    if (session && inChat && currentSession) {
+      addLog('🔄 Auto-subscribing to messages...')
+      subscribeToMessages(currentSession.id)
+    }
+  }, [session, inChat, currentSession])
+
   const testConnection = async () => {
     try {
       addLog('🔍 Testing Supabase connection...')
@@ -70,7 +78,7 @@ export default function SimpleDebugPage() {
       addLog('✅ Joined queue')
       setInQueue(true)
 
-      // Start aggressive checking
+      // Start super aggressive checking
       startMatchChecking()
 
     } catch (err: any) {
@@ -79,14 +87,17 @@ export default function SimpleDebugPage() {
   }
 
   const startMatchChecking = () => {
-    addLog('⏱️ Starting AGGRESSIVE polling (1 second interval)...')
+    addLog('⏱️ Starting SUPER AGGRESSIVE polling (500ms)...')
+    
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
     }
-    // Immediate first check
+    
+    // Check immediately
     setTimeout(checkForMatch, 100)
-    // Then every 1 second
-    pollingRef.current = setInterval(checkForMatch, 1000)
+    
+    // Then check every 500ms
+    pollingRef.current = setInterval(checkForMatch, 500)
   }
 
   const forceCheck = async () => {
@@ -126,7 +137,7 @@ export default function SimpleDebugPage() {
         setInChat(true)
         setCurrentSession(existingSession)
         loadMessages(existingSession.id)
-        subscribeToMessages(existingSession.id)
+        // subscribeToMessages will be triggered by useEffect
         return
       }
 
@@ -221,7 +232,7 @@ export default function SimpleDebugPage() {
       setInChat(true)
       setCurrentSession(newSession)
       loadMessages(newSession.id)
-      subscribeToMessages(newSession.id)
+      // subscribeToMessages will be triggered by useEffect
 
     } catch (err: any) {
       addLog(`❌ Session creation failed: ${err.message}`)
@@ -248,62 +259,59 @@ export default function SimpleDebugPage() {
     
     // Clean up any existing channel
     if (channelRef.current) {
-      addLog('🧹 Removing old channel')
+      addLog('🧹 Cleaning up old channel')
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
     }
 
-    // Remove all channels to be safe
-    supabase.removeAllChannels()
-    
-    const channel = supabase.channel(`chat-${sessionId}`, {
-      config: {
-        broadcast: { self: true },
-        presence: { key: session.guest_id }
-      }
-    })
-    
-    channelRef.current = channel
-
-    channel
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `session_id=eq.${sessionId}`
-      }, (payload) => {
-        const msg = payload.new
-        addLog(`📨 New message: ${msg.sender_display_name} says "${msg.content}"`)
-        
-        // Don't add duplicate messages
-        setMessages(prev => {
-          // Check if we already have this message
-          if (prev.some(m => m.id === msg.id)) {
-            addLog('⏭️ Duplicate message ignored')
-            return prev
-          }
-          addLog(`✅ Adding new message from ${msg.sender_display_name}`)
-          return [...prev, msg]
-        })
-        
-        // Auto-scroll to bottom
-        setTimeout(() => {
-          const chatDiv = document.getElementById('chat-messages')
-          if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
-        }, 100)
-      })
-      .subscribe((status) => {
-        addLog(`📡 Channel status: ${status}`)
-        
-        if (status === 'SUBSCRIBED') {
-          addLog(`✅ Successfully subscribed to messages!`)
-        } else if (status === 'CHANNEL_ERROR') {
-          addLog(`❌ Channel error - will auto-reconnect`)
-          // Auto-reconnect logic in Supabase client handles this
-        } else if (status === 'CLOSED') {
-          addLog(`🔌 Channel closed - will reconnect if needed`)
+    // Wait a moment for cleanup
+    setTimeout(() => {
+      // Create new channel with unique ID
+      const channel = supabase.channel(`chat-${sessionId}-${Date.now()}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: session.guest_id }
         }
       })
+      
+      channelRef.current = channel
+
+      channel
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `session_id=eq.${sessionId}`
+        }, (payload) => {
+          const msg = payload.new
+          addLog(`📨 New message: ${msg.sender_display_name} says "${msg.content}"`)
+          
+          // Don't add duplicate messages
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) {
+              return prev
+            }
+            return [...prev, msg]
+          })
+          
+          // Auto-scroll
+          setTimeout(() => {
+            const chatDiv = document.getElementById('chat-messages')
+            if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
+          }, 100)
+        })
+        .subscribe((status) => {
+          addLog(`📡 Channel status: ${status}`)
+          
+          if (status === 'SUBSCRIBED') {
+            addLog(`✅ Successfully subscribed!`)
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            addLog(`❌ Channel error (${status}) - retrying in 2s...`)
+            // Retry after 2 seconds
+            setTimeout(() => subscribeToMessages(sessionId), 2000)
+          }
+        })
+    }, 500) // Small delay for cleanup
   }
 
   const sendMessage = async () => {
@@ -346,6 +354,7 @@ export default function SimpleDebugPage() {
     
     // Clean up channel
     if (channelRef.current) {
+      addLog('🧹 Cleaning up chat channel')
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
     }
@@ -390,7 +399,7 @@ export default function SimpleDebugPage() {
   return (
     <div style={{ padding: '20px', fontFamily: 'monospace', maxWidth: '800px', margin: '0 auto', background: '#0a0a1a', minHeight: '100vh', color: '#fff' }}>
       <h1 style={{ color: '#0ff', textAlign: 'center' }}>🐞 AUTO-MATCH DEBUG</h1>
-      <p style={{ textAlign: 'center', color: '#999', marginBottom: '20px' }}>Now with 1-second aggressive polling!</p>
+      <p style={{ textAlign: 'center', color: '#999', marginBottom: '20px' }}>Now with 500ms SUPER aggressive polling!</p>
       
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button onClick={testConnection} style={buttonStyle}>Test Connection</button>
@@ -513,9 +522,10 @@ export default function SimpleDebugPage() {
       </div>
 
       <div style={{ marginTop: '20px', color: '#999', fontSize: '13px', padding: '15px', background: '#1a1a2e', borderRadius: '8px' }}>
-        <p>✅ <strong style={{ color: '#0ff' }}>1-SECOND POLLING:</strong> Matches auto-detect in 1-2 seconds!</p>
-        <p>🔍 <strong style={{ color: '#ff0' }}>Force Check:</strong> Manually trigger match check</p>
-        <p>📡 <strong style={{ color: '#0f0' }}>Fixed Realtime:</strong> Clean channel management, no more one-sided messages</p>
+        <p>✅ <strong style={{ color: '#0ff' }}>500ms POLLING:</strong> Matches detect in under 1 second!</p>
+        <p>🔍 <strong style={{ color: '#ff0' }}>Force Check:</strong> Manual trigger still available</p>
+        <p>📡 <strong style={{ color: '#0f0' }}>Auto-Retry:</strong> Channels automatically reconnect on error</p>
+        <p>🔄 <strong style={{ color: '#f0f' }}>Auto-Subscribe:</strong> useEffect handles subscription automatically</p>
       </div>
     </div>
   )
