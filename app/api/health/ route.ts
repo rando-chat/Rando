@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/client'
 
+
+export const dynamic = 'force-static'
+
 export async function GET() {
   const checks = {
     timestamp: new Date().toISOString(),
