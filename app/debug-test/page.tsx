@@ -12,6 +12,7 @@ export default function SimpleDebugPage() {
   const [messages, setMessages] = useState<any[]>([])
   const [messageInput, setMessageInput] = useState('')
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const channelRef = useRef<any>(null)
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
@@ -52,6 +53,8 @@ export default function SimpleDebugPage() {
       }
 
       addLog('🎯 Joining queue...')
+      
+      // Clean up any old entries
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
       const { error } = await supabase.from('matchmaking_queue').insert({
@@ -82,7 +85,7 @@ export default function SimpleDebugPage() {
     }
     // Immediate first check
     setTimeout(checkForMatch, 100)
-    // Then every 1 second (2x faster than standard)
+    // Then every 1 second
     pollingRef.current = setInterval(checkForMatch, 1000)
   }
 
@@ -100,7 +103,7 @@ export default function SimpleDebugPage() {
     try {
       addLog('🔍 Polling... checking for match')
       
-      // 🔥 CRITICAL: ALWAYS check for existing sessions FIRST
+      // CRITICAL: ALWAYS check for existing sessions FIRST
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -108,7 +111,7 @@ export default function SimpleDebugPage() {
         .eq('status', 'active')
         .maybeSingle()
 
-      // 🎯 If found, IMMEDIATELY switch to chat mode
+      // If found, IMMEDIATELY switch to chat mode
       if (existingSession) {
         addLog(`✅ MATCH FOUND! Session: ${existingSession.id.slice(0, 8)}...`)
         
@@ -241,20 +244,47 @@ export default function SimpleDebugPage() {
   }
 
   const subscribeToMessages = (sessionId: string) => {
-    addLog(`📡 Subscribing to messages for session: ${sessionId.slice(0, 8)}...`)
+    addLog(`📡 Setting up message subscription for session: ${sessionId.slice(0, 8)}...`)
     
-    supabase
-      .channel(`chat-${sessionId}`)
+    // Clean up any existing channel
+    if (channelRef.current) {
+      addLog('🧹 Removing old channel')
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
+    // Remove all channels to be safe
+    supabase.removeAllChannels()
+    
+    const channel = supabase.channel(`chat-${sessionId}`, {
+      config: {
+        broadcast: { self: true },
+        presence: { key: session.guest_id }
+      }
+    })
+    
+    channelRef.current = channel
+
+    channel
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'messages',
         filter: `session_id=eq.${sessionId}`
       }, (payload) => {
-        addLog(`📨 New message received via realtime!`)
         const msg = payload.new
-        setMessages(prev => [...prev, msg])
-        addLog(`💬 ${msg.sender_display_name}: ${msg.content}`)
+        addLog(`📨 New message: ${msg.sender_display_name} says "${msg.content}"`)
+        
+        // Don't add duplicate messages
+        setMessages(prev => {
+          // Check if we already have this message
+          if (prev.some(m => m.id === msg.id)) {
+            addLog('⏭️ Duplicate message ignored')
+            return prev
+          }
+          addLog(`✅ Adding new message from ${msg.sender_display_name}`)
+          return [...prev, msg]
+        })
         
         // Auto-scroll to bottom
         setTimeout(() => {
@@ -263,7 +293,16 @@ export default function SimpleDebugPage() {
         }, 100)
       })
       .subscribe((status) => {
-        addLog(`📡 Subscription status: ${status}`)
+        addLog(`📡 Channel status: ${status}`)
+        
+        if (status === 'SUBSCRIBED') {
+          addLog(`✅ Successfully subscribed to messages!`)
+        } else if (status === 'CHANNEL_ERROR') {
+          addLog(`❌ Channel error - will auto-reconnect`)
+          // Auto-reconnect logic in Supabase client handles this
+        } else if (status === 'CLOSED') {
+          addLog(`🔌 Channel closed - will reconnect if needed`)
+        }
       })
   }
 
@@ -271,14 +310,19 @@ export default function SimpleDebugPage() {
     if (!messageInput.trim() || !currentSession || !session) return
 
     try {
-      await supabase.from('messages').insert({
+      const message = {
         session_id: currentSession.id,
         sender_id: session.guest_id,
         sender_is_guest: true,
         sender_display_name: session.display_name,
         content: messageInput,
         created_at: new Date().toISOString()
-      })
+      }
+
+      const { error } = await supabase.from('messages').insert(message)
+      
+      if (error) throw error
+      
       setMessageInput('')
       addLog(`✉️ You sent: ${messageInput}`)
     } catch (err: any) {
@@ -299,10 +343,18 @@ export default function SimpleDebugPage() {
 
   const endChat = async () => {
     if (!currentSession) return
+    
+    // Clean up channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    
     await supabase
       .from('chat_sessions')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
       .eq('id', currentSession.id)
+    
     setInChat(false)
     setCurrentSession(null)
     setMessages([])
@@ -314,9 +366,18 @@ export default function SimpleDebugPage() {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
+    
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    
+    supabase.removeAllChannels()
+    
     if (session) {
       supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
+    
     setSession(null)
     setInQueue(false)
     setInChat(false)
@@ -376,18 +437,34 @@ export default function SimpleDebugPage() {
 
       {inChat && currentSession && (
         <div style={{ background: '#16213e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '2px solid #0f0' }}>
-          <h3 style={{ color: '#0f0', marginBottom: '10px' }}>💬 CHAT ACTIVE - {currentSession.user1_id === session.guest_id ? currentSession.user2_display_name : currentSession.user1_display_name}</h3>
-          <div id="chat-messages" style={{ height: '200px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
+          <h3 style={{ color: '#0f0', marginBottom: '10px' }}>
+            💬 CHAT ACTIVE - {currentSession.user1_id === session?.guest_id 
+              ? currentSession.user2_display_name 
+              : currentSession.user1_display_name}
+          </h3>
+          <div 
+            id="chat-messages" 
+            style={{ 
+              height: '200px', 
+              overflowY: 'auto', 
+              background: '#1a1a2e', 
+              padding: '10px', 
+              marginBottom: '10px', 
+              borderRadius: '5px',
+              border: '1px solid #333'
+            }}
+          >
             {messages.length === 0 ? (
               <div style={{ color: '#666', textAlign: 'center', paddingTop: '80px' }}>No messages yet. Say hi!</div>
             ) : (
               messages.map((msg, i) => (
-                <div key={i} style={{ 
-                  color: msg.sender_id === session.guest_id ? '#0ff' : '#ff0', 
+                <div key={msg.id || i} style={{ 
+                  color: msg.sender_id === session?.guest_id ? '#0ff' : '#ff0', 
                   marginBottom: '8px',
                   padding: '5px',
-                  borderLeft: msg.sender_id === session.guest_id ? '3px solid #0ff' : '3px solid #ff0',
-                  paddingLeft: '10px'
+                  borderLeft: msg.sender_id === session?.guest_id ? '3px solid #0ff' : '3px solid #ff0',
+                  paddingLeft: '10px',
+                  background: msg.sender_id === session?.guest_id ? 'rgba(0,255,255,0.05)' : 'rgba(255,255,0,0.05)'
                 }}>
                   <strong>{msg.sender_display_name}:</strong> {msg.content}
                 </div>
@@ -438,7 +515,7 @@ export default function SimpleDebugPage() {
       <div style={{ marginTop: '20px', color: '#999', fontSize: '13px', padding: '15px', background: '#1a1a2e', borderRadius: '8px' }}>
         <p>✅ <strong style={{ color: '#0ff' }}>1-SECOND POLLING:</strong> Matches auto-detect in 1-2 seconds!</p>
         <p>🔍 <strong style={{ color: '#ff0' }}>Force Check:</strong> Manually trigger match check</p>
-        <p>📱 <strong style={{ color: '#0f0' }}>Ghost User Fix:</strong> Old entries cleaned up automatically</p>
+        <p>📡 <strong style={{ color: '#0f0' }}>Fixed Realtime:</strong> Clean channel management, no more one-sided messages</p>
       </div>
     </div>
   )
