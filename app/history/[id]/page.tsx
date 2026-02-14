@@ -25,7 +25,7 @@ export default function HistoryDetailPage({ params }: { params: Promise<{ id: st
                 <MessageBubble
                   key={msg.id}
                   message={msg}
-                  isCurrentUser={msg.sender_id === getUserId()}
+                  isOwn={msg.sender_id === getUserId()}
                 />
               ))}
             </div>
