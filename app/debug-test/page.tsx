@@ -35,9 +35,9 @@ export default function SimpleDebugPage() {
       if (error) throw error
       
       if (data && data.length > 0) {
-        const session = data[0]
-        setSession(session)
-        addLog(`✅ Got fun name: ${session.display_name}`)
+        const guestSession = data[0]
+        setSession(guestSession)
+        addLog(`✅ Got fun name: ${guestSession.display_name}`)
       }
     } catch (err: any) {
       addLog(`❌ Failed: ${err.message}`)
@@ -67,7 +67,7 @@ export default function SimpleDebugPage() {
       addLog('✅ Joined queue')
       setInQueue(true)
 
-      // Start checking for match
+      // Start aggressive checking
       startMatchChecking()
 
     } catch (err: any) {
@@ -76,12 +76,14 @@ export default function SimpleDebugPage() {
   }
 
   const startMatchChecking = () => {
-    addLog('⏱️ Checking for match every 2 seconds...')
+    addLog('⏱️ Starting AGGRESSIVE polling (1 second interval)...')
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
     }
-    pollingRef.current = setInterval(checkForMatch, 2000)
+    // Immediate first check
     setTimeout(checkForMatch, 100)
+    // Then every 1 second (2x faster than standard)
+    pollingRef.current = setInterval(checkForMatch, 1000)
   }
 
   const forceCheck = async () => {
@@ -90,10 +92,10 @@ export default function SimpleDebugPage() {
   }
 
   const checkForMatch = async () => {
-    if (!session || !inQueue) return
+    if (!session) return
 
     try {
-      // Check if already in chat
+      // 🔥 CRITICAL: ALWAYS check for existing sessions FIRST
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -101,12 +103,17 @@ export default function SimpleDebugPage() {
         .eq('status', 'active')
         .maybeSingle()
 
+      // 🎯 If found, IMMEDIATELY switch to chat mode
       if (existingSession) {
         addLog(`✅ MATCH FOUND! Session: ${existingSession.id.slice(0, 8)}...`)
+        
+        // Kill all polling
         if (pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
         }
+        
+        // Switch to chat mode
         setInQueue(false)
         setInChat(true)
         setCurrentSession(existingSession)
@@ -115,7 +122,10 @@ export default function SimpleDebugPage() {
         return
       }
 
-      // Get ALL queue entries with full details
+      // Only check queue if we're supposed to be in it
+      if (!inQueue) return
+
+      // Get ALL queue entries
       const { data: queue, error } = await supabase
         .from('matchmaking_queue')
         .select('*')
@@ -132,7 +142,7 @@ export default function SimpleDebugPage() {
         addLog(`📊 QUEUE (${queue.length} users):`)
         queue.forEach((entry, i) => {
           const isMe = entry.user_id === session.guest_id
-          addLog(`   ${i+1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''} - entered: ${new Date(entry.entered_at).toLocaleTimeString()}`)
+          addLog(`   ${i+1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''} - ${new Date(entry.entered_at).toLocaleTimeString()}`)
         })
       } else {
         addLog('📭 Queue is empty')
@@ -280,15 +290,35 @@ export default function SimpleDebugPage() {
     addLog('👋 Chat ended')
   }
 
+  const reset = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    if (session) {
+      supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
+    }
+    setSession(null)
+    setInQueue(false)
+    setInChat(false)
+    setCurrentSession(null)
+    setMessages([])
+    setLogs([])
+    addLog('🔄 Reset complete')
+  }
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'monospace', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ color: '#0ff' }}>🐞 FULL DEBUG PAGE</h1>
+    <div style={{ padding: '20px', fontFamily: 'monospace', maxWidth: '800px', margin: '0 auto', background: '#0a0a1a', minHeight: '100vh', color: '#fff' }}>
+      <h1 style={{ color: '#0ff', textAlign: 'center' }}>🐞 AUTO-MATCH DEBUG</h1>
+      <p style={{ textAlign: 'center', color: '#999', marginBottom: '20px' }}>Now with 1-second aggressive polling!</p>
       
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button onClick={testConnection} style={buttonStyle}>Test Connection</button>
         <button onClick={testGuestSession} style={buttonStyle}>Create Guest</button>
         {!inQueue && !inChat && session && (
-          <button onClick={testQueue} style={buttonStyle}>Join Queue</button>
+          <button onClick={testQueue} style={{...buttonStyle, background: '#0f0', color: '#000'}}>
+            Join Queue
+          </button>
         )}
         {inQueue && (
           <>
@@ -305,26 +335,41 @@ export default function SimpleDebugPage() {
             End Chat
           </button>
         )}
+        <button onClick={reset} style={{...buttonStyle, background: '#666'}}>Reset</button>
         <button onClick={() => setLogs([])} style={buttonStyle}>Clear Logs</button>
       </div>
 
       {session && (
-        <div style={{ background: '#1a1a2e', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
-          <div><strong style={{ color: '#0ff' }}>Name:</strong> <span style={{ color: '#ff0', fontWeight: 'bold' }}>{session.display_name}</span></div>
+        <div style={{ background: '#1a1a2e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #0ff' }}>
+          <div><strong style={{ color: '#0ff' }}>Name:</strong> <span style={{ color: '#ff0', fontWeight: 'bold', fontSize: '18px' }}>{session.display_name}</span></div>
           <div><strong style={{ color: '#0ff' }}>ID:</strong> {session.guest_id.slice(0, 8)}...</div>
-          <div><strong style={{ color: '#0ff' }}>Status:</strong> {inChat ? 'IN CHAT' : (inQueue ? 'IN QUEUE' : 'IDLE')}</div>
+          <div><strong style={{ color: '#0ff' }}>Status:</strong> 
+            <span style={{ 
+              color: inChat ? '#0f0' : (inQueue ? '#ff0' : '#f00'),
+              fontWeight: 'bold',
+              marginLeft: '10px'
+            }}>
+              {inChat ? '💬 IN CHAT' : (inQueue ? '⏳ IN QUEUE' : '🔴 IDLE')}
+            </span>
+          </div>
         </div>
       )}
 
       {inChat && currentSession && (
-        <div style={{ background: '#16213e', padding: '10px', borderRadius: '5px', marginBottom: '20px', border: '1px solid #0f0' }}>
-          <h3 style={{ color: '#0f0' }}>💬 CHAT ACTIVE</h3>
-          <div style={{ height: '150px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
+        <div style={{ background: '#16213e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '2px solid #0f0' }}>
+          <h3 style={{ color: '#0f0', marginBottom: '10px' }}>💬 CHAT ACTIVE - {currentSession.user1_id === session.guest_id ? currentSession.user2_display_name : currentSession.user1_display_name}</h3>
+          <div style={{ height: '200px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
             {messages.length === 0 ? (
-              <div style={{ color: '#666', textAlign: 'center' }}>No messages yet</div>
+              <div style={{ color: '#666', textAlign: 'center', paddingTop: '80px' }}>No messages yet. Say hi!</div>
             ) : (
               messages.map((msg, i) => (
-                <div key={i} style={{ color: msg.sender_id === session.guest_id ? '#0ff' : '#ff0', marginBottom: '5px' }}>
+                <div key={i} style={{ 
+                  color: msg.sender_id === session.guest_id ? '#0ff' : '#ff0', 
+                  marginBottom: '8px',
+                  padding: '5px',
+                  borderLeft: msg.sender_id === session.guest_id ? '3px solid #0ff' : '3px solid #ff0',
+                  paddingLeft: '10px'
+                }}>
                   <strong>{msg.sender_display_name}:</strong> {msg.content}
                 </div>
               ))
@@ -338,14 +383,15 @@ export default function SimpleDebugPage() {
               placeholder="Type a message..."
               style={{ 
                 flex: 1, 
-                padding: '8px',
+                padding: '10px',
                 background: '#1a1a2e',
                 border: '1px solid #0ff',
                 borderRadius: '4px',
-                color: '#fff'
+                color: '#fff',
+                fontSize: '14px'
               }}
             />
-            <button onClick={sendMessage} style={buttonStyle}>Send</button>
+            <button onClick={sendMessage} style={{...buttonStyle, padding: '10px 20px'}}>Send</button>
           </div>
         </div>
       )}
@@ -353,32 +399,40 @@ export default function SimpleDebugPage() {
       <div style={{ 
         background: '#000', 
         color: '#0f0', 
-        padding: '10px', 
-        borderRadius: '5px',
+        padding: '15px', 
+        borderRadius: '8px',
         height: '400px',
         overflowY: 'auto',
         fontSize: '12px',
-        fontFamily: 'monospace'
+        fontFamily: 'monospace',
+        border: '1px solid #0f0'
       }}>
-        {logs.map((log, i) => (
-          <div key={i} style={{ marginBottom: '2px', whiteSpace: 'pre-wrap' }}>{log}</div>
-        ))}
+        {logs.length === 0 ? (
+          <div style={{ color: '#666', textAlign: 'center', paddingTop: '180px' }}>Logs will appear here...</div>
+        ) : (
+          logs.map((log, i) => (
+            <div key={i} style={{ marginBottom: '3px', whiteSpace: 'pre-wrap' }}>{log}</div>
+          ))
+        )}
       </div>
 
-      <div style={{ marginTop: '20px', color: '#999', fontSize: '12px' }}>
-        <p>✅ Click <strong style={{ color: '#ff0' }}>Force Check</strong> on one phone to force match</p>
-        <p>📱 If they don't match, check if both are in the same queue</p>
+      <div style={{ marginTop: '20px', color: '#999', fontSize: '13px', padding: '15px', background: '#1a1a2e', borderRadius: '8px' }}>
+        <p>✅ <strong style={{ color: '#0ff' }}>1-SECOND POLLING:</strong> Matches auto-detect in 1-2 seconds!</p>
+        <p>🔍 <strong style={{ color: '#ff0' }}>Force Check:</strong> Manually trigger match check</p>
+        <p>📱 <strong style={{ color: '#0f0' }}>Ghost User Fix:</strong> Old entries cleaned up automatically</p>
       </div>
     </div>
   )
 }
 
 const buttonStyle = {
-  padding: '8px 16px',
+  padding: '10px 16px',
   background: '#0ff',
   border: 'none',
-  borderRadius: '4px',
+  borderRadius: '6px',
   cursor: 'pointer',
   fontWeight: 'bold',
-  fontSize: '14px'
+  fontSize: '14px',
+  color: '#000',
+  transition: 'all 0.2s'
 }
