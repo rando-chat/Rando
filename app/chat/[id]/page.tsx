@@ -38,6 +38,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         const { data } = await supabase.rpc('create_guest_session')
         if (data && data.length > 0) {
           setGuestSession(data[0])
+          // Setup presence after guest session is ready
           setupTypingPresence(data[0])
         }
 
@@ -77,6 +78,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     }, 100)
   }
 
+  // FIXED: Presence channel typing
   const setupTypingPresence = (guest: any) => {
     if (!guest) return
 
@@ -91,6 +93,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState()
+        // The presence state returns objects with the key as user_id
         const typingUsers = Object.keys(state).filter(key => {
           const userPresence = state[key] as any[]
           return userPresence[0]?.typing && key !== guest.guest_id
@@ -235,19 +238,23 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f9fafb' }}>
-      {/* Header */}
+      {/* Header with online status */}
       <div style={{ padding: '16px 20px', background: 'white', borderBottom: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>💬 {partnerName || 'Anonymous'}</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} />
-              <span style={{ fontSize: 13, color: '#6b7280' }}>Online</span>
-              <span style={{ fontSize: 13, color: '#9ca3af' }}>•</span>
-              <span style={{ fontSize: 13, color: '#6b7280' }}>You: {guestSession.display_name}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div>
+              <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>💬 {partnerName || 'Anonymous'}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} />
+                <span style={{ fontSize: 13, color: '#6b7280' }}>Online</span>
+                <span style={{ fontSize: 13, color: '#9ca3af' }}>•</span>
+                <span style={{ fontSize: 13, color: '#6b7280' }}>You: {guestSession.display_name}</span>
+              </div>
             </div>
           </div>
-          <button onClick={() => router.push('/matchmaking')} style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>End Chat</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => router.push('/matchmaking')} style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>End Chat</button>
+          </div>
         </div>
       </div>
 
@@ -293,7 +300,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                       )}
                     </div>
                     {isMe && (
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>✓</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>
+                        ✓
+                      </div>
                     )}
                   </div>
                 </div>
@@ -302,7 +311,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           })
         )}
         
-        {/* Typing indicator */}
+        {/* Typing indicator - FIXED: Now using partnerTyping state */}
         {partnerTyping && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{ background: 'white', padding: '12px 16px', borderRadius: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
@@ -356,7 +365,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   background: '#f3f4f6', 
                   borderRadius: 8, 
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  ':hover': { background: '#e5e7eb' }
                 }}
               >
                 {emoji}
