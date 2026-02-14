@@ -44,49 +44,45 @@ export default function DebugPage() {
   const initConnection = async () => {
     addLog('Connecting to Supabase...', 'info')
     try {
+      // Test connection
       const { error } = await supabase.from('matchmaking_queue').select('count').limit(1)
       if (error) throw error
 
       addLog('✅ Connected to Supabase successfully', 'success')
       setConnected(true)
 
-      const userId = generateUUID()
-      setMyUserId(userId)
-      addLog(`Generated user ID: ${userId.slice(0, 8)}...`, 'info')
+      // Create a REAL guest session with fun name from database
+      addLog('🎨 Getting fun name from database...', 'info')
+      
+      const { data: guestSession, error: guestError } = await supabase
+        .rpc('create_guest_session', {
+          p_ip_address: null,
+          p_user_agent: navigator.userAgent,
+          p_country_code: null
+        });
 
+      if (guestError) throw guestError;
+
+      if (guestSession && guestSession.length > 0) {
+        const session = guestSession[0];
+        setMyUserId(session.guest_id);
+        setDisplayName(session.display_name);
+        addLog(`✨ Got fun name: ${session.display_name}`, 'success');
+      } else {
+        // Fallback to generated ID if something goes wrong
+        const userId = generateUUID();
+        setMyUserId(userId);
+        setDisplayName('Guest_' + userId.slice(-4));
+        addLog(`⚠️ Using fallback name: Guest_${userId.slice(-4)}`, 'warn');
+      }
+
+      // Start stats updates
       setInterval(updateStats, 3000)
       updateStats()
+      
     } catch (error: any) {
       addLog('❌ Failed to connect: ' + error.message, 'error')
     }
-  }
-
-  const getFunName = async (): Promise<string> => {
-    try {
-      // Try to call the database function first
-      const { data: funName } = await supabase.rpc('generate_fun_name');
-      
-      if (funName) {
-        return funName;
-      }
-      
-      // Fallback: get a random existing name
-      const { data: recentNames } = await supabase
-        .from('guest_sessions')
-        .select('display_name')
-        .order('created_at', { ascending: false })
-        .limit(20);
-      
-      if (recentNames && recentNames.length > 0) {
-        const randomIndex = Math.floor(Math.random() * recentNames.length);
-        return recentNames[randomIndex].display_name;
-      }
-    } catch (error) {
-      addLog('⚠️ Name generator error, using fallback', 'warn');
-    }
-    
-    // Ultimate fallback
-    return 'Guest_' + (myUserId?.slice(-4) || '0000');
   }
 
   const joinQueue = async () => {
@@ -95,16 +91,12 @@ export default function DebugPage() {
     addLog('🎯 Joining matchmaking queue...', 'info')
 
     try {
+      // Clean up any existing queue entries
       await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
-
-      // Get a fun name
-      const funName = await getFunName()
-      setDisplayName(funName)
-      addLog(`✨ Got fun name: ${funName}`, 'success')
 
       const { error } = await supabase.from('matchmaking_queue').insert({
         user_id: myUserId,
-        display_name: funName,
+        display_name: displayName,
         is_guest: true,
         tier: 'free',
         interests: [],
@@ -114,9 +106,10 @@ export default function DebugPage() {
 
       if (error) throw error
 
-      addLog(`✅ Joined queue as ${funName}`, 'success')
+      addLog(`✅ Joined queue as ${displayName}`, 'success')
       setIsInQueue(true)
 
+      // Start polling for matches
       pollCountRef.current = 0
       pollIntervalRef.current = setInterval(pollForMatch, 2000)
       setTimeout(pollForMatch, 500)
@@ -135,6 +128,7 @@ export default function DebugPage() {
     try {
       addLog(`🔄 Poll #${pollCountRef.current}: Checking for match...`, 'info')
 
+      // Check if already in a chat session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -143,12 +137,13 @@ export default function DebugPage() {
         .maybeSingle()
 
       if (existingSession) {
-        addLog('✅ MATCH FOUND! Session ID: ' + existingSession.id, 'success')
+        addLog(`✅ MATCH FOUND! Session with ${existingSession.user1_id === myUserId ? existingSession.user2_display_name : existingSession.user1_display_name}`, 'success')
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-        alert('Match found! Session ID: ' + existingSession.id)
+        alert(`🎉 Matched! You're chatting now!`)
         return
       }
 
+      // Get current queue
       const { data: allInQueue } = await supabase
         .from('matchmaking_queue')
         .select('*')
@@ -160,10 +155,11 @@ export default function DebugPage() {
       if (allInQueue && allInQueue.length > 0) {
         allInQueue.forEach((entry, i) => {
           const isMe = entry.user_id === myUserId
-          addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0, 8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
+          addLog(`   ${i + 1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''}`, 'info')
         })
       }
 
+      // Find a partner (not yourself)
       const partner = allInQueue?.find(e => e.user_id !== myUserId)
 
       if (!partner) {
@@ -171,26 +167,29 @@ export default function DebugPage() {
         return
       }
 
-      addLog(`   👥 Found partner: ${partner.display_name} (${partner.user_id.slice(0, 8)}...)`, 'success')
+      addLog(`   👥 Found partner: ${partner.displayName || partner.display_name}`, 'success')
 
+      // Deterministic decision: whoever has the smaller user_id creates the session
       const shouldCreate = myUserId < partner.user_id
-      addLog(`   🎲 Should I create? ${shouldCreate}`, 'info')
+      addLog(`   🎲 ${shouldCreate ? 'I create' : 'Partner creates'} session`, 'info')
 
       if (shouldCreate) {
         addLog('   🔨 Creating chat session...', 'info')
 
+        // Mark both as matched
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
           .in('user_id', [myUserId, partner.user_id])
 
+        // Create the chat session
         const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
           .insert({
             user1_id: myUserId,
             user2_id: partner.user_id,
-            user1_display_name: displayName || 'Guest_' + myUserId.slice(-4),
-            user2_display_name: partner.display_name || 'Anonymous',
+            user1_display_name: displayName,
+            user2_display_name: partner.display_name,
             status: 'active',
             started_at: new Date().toISOString(),
           })
@@ -199,6 +198,7 @@ export default function DebugPage() {
 
         if (sessionError) {
           addLog('   ❌ Session creation failed: ' + sessionError.message, 'error')
+          // Rollback the matched_at update
           await supabase
             .from('matchmaking_queue')
             .update({ matched_at: null })
@@ -206,12 +206,13 @@ export default function DebugPage() {
           return
         }
 
-        addLog('   ✅ Session created: ' + session.id, 'success')
+        addLog(`   ✅ Session created with ${partner.display_name}!`, 'success')
 
+        // Remove from queue
         await supabase.from('matchmaking_queue').delete().in('user_id', [myUserId, partner.user_id])
 
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
-        alert('✅ MATCHED! Session: ' + session.id)
+        alert(`🎉 MATCHED with ${partner.display_name}!`)
       } else {
         addLog('   ⏳ Waiting for partner to create session...', 'warn')
       }
@@ -235,7 +236,6 @@ export default function DebugPage() {
       await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
       addLog('✅ Left queue', 'success')
       setIsInQueue(false)
-      setDisplayName('')
       pollCountRef.current = 0
       setStats(prev => ({ ...prev, polls: 0 }))
     } catch (error: any) {
@@ -255,7 +255,7 @@ export default function DebugPage() {
 
       addLog(`📋 Queue has ${data?.length || 0} users:`, 'info')
       data?.forEach((entry, i) => {
-        addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0, 12)}...)`, 'info')
+        addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0, 8)}...)`, 'info')
       })
     } catch (error: any) {
       addLog('❌ Error: ' + error.message, 'error')
@@ -273,7 +273,7 @@ export default function DebugPage() {
         {/* Header */}
         <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: 30, textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, marginBottom: 8 }}>🔍 Matchmaking Debug</h1>
-          <p style={{ opacity: 0.9, fontSize: 14 }}>Real-time diagnostics with fun names!</p>
+          <p style={{ opacity: 0.9, fontSize: 14 }}>Real-time diagnostics with fun names! 🎨</p>
         </div>
 
         <div style={{ padding: 30 }}>
@@ -327,14 +327,16 @@ export default function DebugPage() {
           {myUserId && (
             <div style={{ background: '#f8f9fa', padding: 16, borderRadius: 8, marginBottom: 20, fontSize: 14 }}>
               <strong>Your ID:</strong> {myUserId.slice(0, 8)}...<br/>
-              <strong>Display Name:</strong> <span style={{ color: '#667eea', fontWeight: 'bold' }}>{displayName || 'Guest_' + myUserId.slice(-4)}</span>
+              <strong>Display Name:</strong> <span style={{ color: '#667eea', fontWeight: 'bold' }}>
+                {displayName || 'Guest_' + myUserId.slice(-4)}
+              </span>
             </div>
           )}
 
           {/* Logs */}
           <div style={{ background: '#1e1e1e', color: '#d4d4d4', padding: 16, borderRadius: 8, fontFamily: 'monospace', fontSize: 13, maxHeight: 400, overflowY: 'auto' }}>
             {logs.length === 0 ? 'Waiting for activity...' : logs.map((log, i) => (
-              <div key={i} style={{ marginBottom: 4 }}>{log}</div>
+              <div key={i} style={{ marginBottom: 4, whiteSpace: 'pre-wrap' }}>{log}</div>
             ))}
           </div>
         </div>
