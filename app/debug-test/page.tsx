@@ -3,14 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase/client'
 
-
 export const dynamic = 'force-static'
-// ... rest of your code
 
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
   const [stats, setStats] = useState({ queue: 0, sessions: 0, polls: 0 })
   const [myUserId, setMyUserId] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState<string>('')
   const [isInQueue, setIsInQueue] = useState(false)
   const [connected, setConnected] = useState(false)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -18,12 +17,6 @@ export default function DebugPage() {
 
   const addLog = (message: string, type: 'info' | 'success' | 'error' | 'warn' = 'info') => {
     const time = new Date().toLocaleTimeString()
-    const colorMap = {
-      info: '#4fc3f7',
-      success: '#81c784',
-      error: '#e57373',
-      warn: '#ffb74d',
-    }
     setLogs(prev => [...prev, `[${time}] ${message}`])
     console.log(`[${type.toUpperCase()}]`, message)
   }
@@ -68,6 +61,34 @@ export default function DebugPage() {
     }
   }
 
+  const getFunName = async (): Promise<string> => {
+    try {
+      // Try to call the database function first
+      const { data: funName } = await supabase.rpc('generate_fun_name');
+      
+      if (funName) {
+        return funName;
+      }
+      
+      // Fallback: get a random existing name
+      const { data: recentNames } = await supabase
+        .from('guest_sessions')
+        .select('display_name')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      
+      if (recentNames && recentNames.length > 0) {
+        const randomIndex = Math.floor(Math.random() * recentNames.length);
+        return recentNames[randomIndex].display_name;
+      }
+    } catch (error) {
+      addLog('⚠️ Name generator error, using fallback', 'warn');
+    }
+    
+    // Ultimate fallback
+    return 'Guest_' + (myUserId?.slice(-4) || '0000');
+  }
+
   const joinQueue = async () => {
     if (!myUserId) return
 
@@ -76,9 +97,14 @@ export default function DebugPage() {
     try {
       await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
 
+      // Get a fun name
+      const funName = await getFunName()
+      setDisplayName(funName)
+      addLog(`✨ Got fun name: ${funName}`, 'success')
+
       const { error } = await supabase.from('matchmaking_queue').insert({
         user_id: myUserId,
-        display_name: 'Guest_' + myUserId.slice(-4),
+        display_name: funName,
         is_guest: true,
         tier: 'free',
         interests: [],
@@ -88,7 +114,7 @@ export default function DebugPage() {
 
       if (error) throw error
 
-      addLog('✅ Joined queue successfully', 'success')
+      addLog(`✅ Joined queue as ${funName}`, 'success')
       setIsInQueue(true)
 
       pollCountRef.current = 0
@@ -134,7 +160,7 @@ export default function DebugPage() {
       if (allInQueue && allInQueue.length > 0) {
         allInQueue.forEach((entry, i) => {
           const isMe = entry.user_id === myUserId
-          addLog(`   ${i + 1}. ${entry.user_id.slice(0, 8)}... ${isMe ? '(ME)' : ''}`, 'info')
+          addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0, 8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
         })
       }
 
@@ -145,7 +171,7 @@ export default function DebugPage() {
         return
       }
 
-      addLog(`   👥 Found partner: ${partner.user_id.slice(0, 8)}...`, 'success')
+      addLog(`   👥 Found partner: ${partner.display_name} (${partner.user_id.slice(0, 8)}...)`, 'success')
 
       const shouldCreate = myUserId < partner.user_id
       addLog(`   🎲 Should I create? ${shouldCreate}`, 'info')
@@ -163,7 +189,7 @@ export default function DebugPage() {
           .insert({
             user1_id: myUserId,
             user2_id: partner.user_id,
-            user1_display_name: 'Guest_' + myUserId.slice(-4),
+            user1_display_name: displayName || 'Guest_' + myUserId.slice(-4),
             user2_display_name: partner.display_name || 'Anonymous',
             status: 'active',
             started_at: new Date().toISOString(),
@@ -209,6 +235,7 @@ export default function DebugPage() {
       await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
       addLog('✅ Left queue', 'success')
       setIsInQueue(false)
+      setDisplayName('')
       pollCountRef.current = 0
       setStats(prev => ({ ...prev, polls: 0 }))
     } catch (error: any) {
@@ -228,7 +255,7 @@ export default function DebugPage() {
 
       addLog(`📋 Queue has ${data?.length || 0} users:`, 'info')
       data?.forEach((entry, i) => {
-        addLog(`   ${i + 1}. user_id: ${entry.user_id.slice(0, 12)}..., name: ${entry.display_name}`, 'info')
+        addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0, 12)}...)`, 'info')
       })
     } catch (error: any) {
       addLog('❌ Error: ' + error.message, 'error')
@@ -246,7 +273,7 @@ export default function DebugPage() {
         {/* Header */}
         <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: 30, textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, marginBottom: 8 }}>🔍 Matchmaking Debug</h1>
-          <p style={{ opacity: 0.9, fontSize: 14 }}>Real-time diagnostics</p>
+          <p style={{ opacity: 0.9, fontSize: 14 }}>Real-time diagnostics with fun names!</p>
         </div>
 
         <div style={{ padding: 30 }}>
@@ -300,7 +327,7 @@ export default function DebugPage() {
           {myUserId && (
             <div style={{ background: '#f8f9fa', padding: 16, borderRadius: 8, marginBottom: 20, fontSize: 14 }}>
               <strong>Your ID:</strong> {myUserId.slice(0, 8)}...<br/>
-              <strong>Display Name:</strong> Guest_{myUserId.slice(-4)}
+              <strong>Display Name:</strong> <span style={{ color: '#667eea', fontWeight: 'bold' }}>{displayName || 'Guest_' + myUserId.slice(-4)}</span>
             </div>
           )}
 
