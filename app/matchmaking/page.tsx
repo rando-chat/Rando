@@ -28,7 +28,7 @@ export default function MatchmakingPage() {
     })
   }
 
-  // Initialize guest session
+  // Initialize guest session and START POLLING IMMEDIATELY
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -50,6 +50,11 @@ export default function MatchmakingPage() {
         }
 
         setIsInitializing(false)
+        
+        // 🔥 START POLLING IMMEDIATELY - even before user clicks anything
+        addLog('⏱️ Starting background polling (checking for existing matches)...')
+        startPolling()
+        
       } catch (err) {
         addLog(`❌ Init error: ${err}`)
         const uuid = generateUUID()
@@ -58,13 +63,27 @@ export default function MatchmakingPage() {
           display_name: 'Guest_' + uuid.slice(0, 8)
         })
         setIsInitializing(false)
+        startPolling()
       }
     }
 
     initialize()
   }, [])
 
-  // Check for match - FIXED VERSION
+  // Start polling function
+  const startPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
+    
+    // Immediate first check
+    setTimeout(() => checkForMatch(), 100)
+    
+    // Then interval
+    pollingRef.current = setInterval(() => checkForMatch(), 500)
+  }
+
+  // Check for match - ALWAYS RUNS (no isInQueue check)
   const checkForMatch = async () => {
     addLog('🔍 Polling... checking for match')
     
@@ -93,21 +112,9 @@ export default function MatchmakingPage() {
         return
       }
 
-      // Don't rely on isInQueue state - check queue directly
-      addLog('🔍 Checking queue...')
-      
-      // Get MY queue entry to verify I'm actually in queue
-      const { data: myEntry } = await supabase
-        .from('matchmaking_queue')
-        .select('*')
-        .eq('user_id', session.guest_id)
-        .is('matched_at', null)
-        .maybeSingle()
-
-      if (!myEntry) {
-        addLog('⏸️ Not in queue (verified by DB)')
-        // Update UI state to match reality
-        setIsInQueue(false)
+      // Only proceed if we're in queue
+      if (!isInQueue) {
+        addLog('⏸️ Not in queue - waiting for user to join')
         return
       }
 
@@ -178,7 +185,7 @@ export default function MatchmakingPage() {
     }
   }
 
-  // FIXED handleStartChatting
+  // "Start Chatting" now just JOINS QUEUE
   const handleStartChatting = async () => {
     if (!session) return
 
@@ -203,20 +210,9 @@ export default function MatchmakingPage() {
       setIsInQueue(true)
       setEstimatedWait(30)
       
-      // Start polling
-      addLog('⏱️ Starting 500ms polling...')
-      
-      // Clear any existing polling
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-        pollingRef.current = null
-      }
-      
-      // Immediate first check
+      // Force an immediate check
+      addLog('🔍 FORCE CHECKING NOW...')
       setTimeout(() => checkForMatch(), 100)
-      
-      // Then interval
-      pollingRef.current = setInterval(() => checkForMatch(), 500)
       
     } catch (err) {
       addLog(`❌ Join error: ${err}`)
@@ -227,10 +223,6 @@ export default function MatchmakingPage() {
 
   const handleCancel = async () => {
     addLog('🚪 Cancelling...')
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
     if (session) {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
@@ -295,13 +287,13 @@ export default function MatchmakingPage() {
           <>
             <div style={{ fontSize: 48, marginBottom: 20, textAlign: 'center' }}>💬</div>
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 10, color: '#1f2937', textAlign: 'center' }}>
-              Start Chatting
+              Ready to Chat
             </h1>
             <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 10, textAlign: 'center' }}>
-              You will be matched with a random stranger
+              Click below to find a random stranger
             </p>
             <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 30, textAlign: 'center' }}>
-              Chatting as: <strong style={{ color: '#667eea' }}>{session?.display_name || 'Loading...'}</strong>
+              You are: <strong style={{ color: '#667eea' }}>{session?.display_name || 'Loading...'}</strong>
             </p>
 
             <button
@@ -321,7 +313,7 @@ export default function MatchmakingPage() {
                 boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)'
               }}
             >
-              {isLoading ? 'Joining...' : 'Start Chatting'}
+              {isLoading ? 'Joining...' : 'Find a Stranger'}
             </button>
           </>
         ) : (
@@ -381,29 +373,29 @@ export default function MatchmakingPage() {
             >
               Cancel
             </button>
-
-            {/* Debug logs */}
-            <div style={{
-              marginTop: 30,
-              padding: 15,
-              background: '#1a1a2e',
-              color: '#0f0',
-              borderRadius: 8,
-              fontFamily: 'monospace',
-              fontSize: 12,
-              maxHeight: 200,
-              overflowY: 'auto'
-            }}>
-              {logs.length === 0 ? (
-                <div style={{ color: '#666', textAlign: 'center' }}>Logs will appear here...</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} style={{ marginBottom: 3 }}>{log}</div>
-                ))
-              )}
-            </div>
           </>
         )}
+
+        {/* Debug logs */}
+        <div style={{
+          marginTop: 30,
+          padding: 15,
+          background: '#1a1a2e',
+          color: '#0f0',
+          borderRadius: 8,
+          fontFamily: 'monospace',
+          fontSize: 12,
+          maxHeight: 200,
+          overflowY: 'auto'
+        }}>
+          {logs.length === 0 ? (
+            <div style={{ color: '#666', textAlign: 'center' }}>Logs will appear here...</div>
+          ) : (
+            logs.map((log, i) => (
+              <div key={i} style={{ marginBottom: 3 }}>{log}</div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
