@@ -3,62 +3,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { useAuth } from '@/components/auth/AuthProvider'
 
 export default function MatchmakingPage() {
   const router = useRouter()
-  const { getUserId, dbUser } = useAuth()
-  const [displayName, setDisplayName] = useState<string>('')
-  const [guestId, setGuestId] = useState<string | null>(null)
+  const [session, setSession] = useState<any>(null) // Store ENTIRE session object like debug
   const [isInQueue, setIsInQueue] = useState(false)
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [isLoading, setIsLoading] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Initialize guest session
-  useEffect(() => {
-    const initializeGuest = async () => {
-      try {
-        const existingUserId = getUserId()
-        
-        if (existingUserId) {
-          const userName = typeof dbUser?.display_name === 'string' ? dbUser.display_name : 'User'
-          setGuestId(existingUserId)
-          setDisplayName(userName)
-          setIsInitializing(false)
-          return
-        }
-
-        const { data: guestSession, error } = await supabase.rpc('create_guest_session', {
-          p_ip_address: null,
-          p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-          p_country_code: null
-        })
-
-        if (error) throw error
-
-        if (guestSession && guestSession.length > 0) {
-          const session = guestSession[0]
-          setGuestId(String(session.guest_id))
-          setDisplayName(String(session.display_name))
-        } else {
-          throw new Error('No guest session returned')
-        }
-
-        setIsInitializing(false)
-      } catch (err: any) {
-        console.error('[Matchmaking] Init error:', err)
-        const uuid = generateUUID()
-        setGuestId(uuid)
-        setDisplayName('Guest_' + uuid.slice(0, 8))
-        setIsInitializing(false)
-      }
-    }
-
-    initializeGuest()
-  }, [getUserId, dbUser])
-
+  // Generate UUID
   const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0
@@ -67,15 +22,50 @@ export default function MatchmakingPage() {
     })
   }
 
+  // Initialize - EXACTLY like debug page
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        const { data, error } = await supabase.rpc('create_guest_session', {
+          p_ip_address: null,
+          p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          p_country_code: null
+        })
+
+        if (error) throw error
+
+        if (data && data.length > 0) {
+          const guestSession = data[0]
+          setSession(guestSession) // Store entire object
+        } else {
+          throw new Error('No guest session')
+        }
+
+        setIsInitializing(false)
+      } catch (err) {
+        console.error('Init error:', err)
+        const uuid = generateUUID()
+        setSession({
+          guest_id: uuid,
+          display_name: 'Guest_' + uuid.slice(0, 8)
+        })
+        setIsInitializing(false)
+      }
+    }
+
+    initialize()
+  }, [])
+
+  // Check for match - EXACTLY like debug page
   const checkForMatch = async () => {
-    if (!guestId) return
+    if (!session) return
 
     try {
-      // Check for existing session first
+      // Check for existing session FIRST
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
-        .or(`user1_id.eq.${guestId},user2_id.eq.${guestId}`)
+        .or(`user1_id.eq.${session.guest_id},user2_id.eq.${session.guest_id}`)
         .eq('status', 'active')
         .maybeSingle()
 
@@ -88,28 +78,33 @@ export default function MatchmakingPage() {
         return
       }
 
-      // Check queue
+      if (!isInQueue) return
+
+      // Get queue
       const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      const partner = queue?.find(u => u.user_id !== guestId)
+      if (!queue || queue.length === 0) return
 
-      if (partner && guestId < partner.user_id) {
-        // Create session
+      const partner = queue.find(u => u.user_id !== session.guest_id)
+      if (!partner) return
+
+      // Create session if I should
+      if (session.guest_id < partner.user_id) {
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
-          .in('user_id', [guestId, partner.user_id])
+          .in('user_id', [session.guest_id, partner.user_id])
 
-        const { data: session } = await supabase
+        const { data: newSession } = await supabase
           .from('chat_sessions')
           .insert({
-            user1_id: guestId,
+            user1_id: session.guest_id,
             user2_id: partner.user_id,
-            user1_display_name: displayName,
+            user1_display_name: session.display_name,
             user2_display_name: partner.display_name,
             status: 'active',
             started_at: new Date().toISOString()
@@ -117,48 +112,48 @@ export default function MatchmakingPage() {
           .select()
           .single()
 
-        if (session) {
-          await supabase.from('matchmaking_queue').delete().in('user_id', [guestId, partner.user_id])
+        if (newSession) {
+          await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
           
           if (pollingRef.current) {
             clearInterval(pollingRef.current)
             pollingRef.current = null
           }
           
-          router.push(`/chat/${session.id}`)
+          router.push(`/chat/${newSession.id}`)
         }
       }
 
       setEstimatedWait(prev => Math.max(5, prev - 1))
     } catch (err) {
-      console.error('[Matchmaking] Check error:', err)
+      console.error('Match check error:', err)
     }
   }
 
   const handleStartChatting = async () => {
-    if (!guestId) return
+    if (!session) return
 
     setIsLoading(true)
     try {
-      await supabase.from('matchmaking_queue').delete().eq('user_id', guestId)
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
       await supabase.from('matchmaking_queue').insert({
-        user_id: guestId,
-        display_name: displayName,
-        is_guest: !getUserId(),
-        tier: dbUser?.tier || 'free',
-        interests: dbUser?.interests || [],
+        user_id: session.guest_id,
+        display_name: session.display_name,
+        is_guest: true,
+        tier: 'free',
+        interests: [],
         entered_at: new Date().toISOString()
       })
 
       setIsInQueue(true)
       
-      // Start aggressive polling (500ms)
-      pollingRef.current = setInterval(checkForMatch, 500)
+      // Start polling - EXACTLY like debug (500ms)
       setTimeout(checkForMatch, 100)
+      pollingRef.current = setInterval(checkForMatch, 500)
       
-    } catch (err: any) {
-      console.error('[Matchmaking] Error:', err)
+    } catch (err) {
+      console.error('Start error:', err)
     } finally {
       setIsLoading(false)
     }
@@ -169,8 +164,8 @@ export default function MatchmakingPage() {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
-    if (guestId) {
-      await supabase.from('matchmaking_queue').delete().eq('user_id', guestId)
+    if (session) {
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
     setIsInQueue(false)
     setEstimatedWait(30)
@@ -238,7 +233,7 @@ export default function MatchmakingPage() {
               You will be matched with a random stranger
             </p>
             <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 30 }}>
-              Chatting as: <strong style={{ color: '#667eea' }}>{String(displayName)}</strong>
+              Chatting as: <strong style={{ color: '#667eea' }}>{session?.display_name || 'Loading...'}</strong>
             </p>
 
             <button
@@ -291,9 +286,9 @@ export default function MatchmakingPage() {
               fontWeight: 600,
               marginBottom: 24
             }}>
-              {String(estimatedWait)}s
+              {estimatedWait}s
               <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 4 }}>
-                Est. remaining
+                {' '}Est. remaining
               </span>
             </div>
 
