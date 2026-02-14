@@ -11,6 +11,8 @@ export default function SimpleDebugPage() {
   const [currentSession, setCurrentSession] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [messageInput, setMessageInput] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const channelRef = useRef<any>(null)
 
@@ -249,69 +251,71 @@ export default function SimpleDebugPage() {
     if (data) {
       setMessages(data)
       data.forEach(msg => {
-        addLog(`💬 ${msg.sender_display_name}: ${msg.content}`)
+        if (msg.content.startsWith('📷 Image:')) {
+          addLog(`🖼️ ${msg.sender_display_name} shared an image`)
+        } else {
+          addLog(`💬 ${msg.sender_display_name}: ${msg.content}`)
+        }
       })
     }
   }
 
   const subscribeToMessages = (sessionId: string) => {
-    addLog(`📡 Setting up message subscription for session: ${sessionId.slice(0, 8)}...`)
-    
-    // Clean up any existing channel
+    // If already subscribed to this session, don't create another channel
     if (channelRef.current) {
-      addLog('🧹 Cleaning up old channel')
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
+      addLog('⚠️ Already have a channel, skipping duplicate subscription')
+      return
     }
 
-    // Wait a moment for cleanup
-    setTimeout(() => {
-      // Create new channel with unique ID
-      const channel = supabase.channel(`chat-${sessionId}-${Date.now()}`, {
-        config: {
-          broadcast: { self: true },
-          presence: { key: session.guest_id }
+    addLog(`📡 Setting up message subscription for session: ${sessionId.slice(0, 8)}...`)
+    
+    // Create new channel with unique ID
+    const channel = supabase.channel(`chat-${sessionId}-${Date.now()}`, {
+      config: {
+        broadcast: { self: true },
+        presence: { key: session.guest_id }
+      }
+    })
+    
+    channelRef.current = channel
+
+    channel
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `session_id=eq.${sessionId}`
+      }, (payload) => {
+        const msg = payload.new
+        if (msg.content.startsWith('📷 Image:')) {
+          addLog(`🖼️ ${msg.sender_display_name} shared an image`)
+        } else {
+          addLog(`📨 New message: ${msg.sender_display_name} says "${msg.content}"`)
+        }
+        
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) {
+            return prev
+          }
+          return [...prev, msg]
+        })
+        
+        setTimeout(() => {
+          const chatDiv = document.getElementById('chat-messages')
+          if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
+        }, 100)
+      })
+      .subscribe((status) => {
+        addLog(`📡 Channel status: ${status}`)
+        
+        if (status === 'SUBSCRIBED') {
+          addLog(`✅ Successfully subscribed!`)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          addLog(`❌ Channel error - retrying in 2s...`)
+          channelRef.current = null // Clear so we can retry
+          setTimeout(() => subscribeToMessages(sessionId), 2000)
         }
       })
-      
-      channelRef.current = channel
-
-      channel
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `session_id=eq.${sessionId}`
-        }, (payload) => {
-          const msg = payload.new
-          addLog(`📨 New message: ${msg.sender_display_name} says "${msg.content}"`)
-          
-          // Don't add duplicate messages
-          setMessages(prev => {
-            if (prev.some(m => m.id === msg.id)) {
-              return prev
-            }
-            return [...prev, msg]
-          })
-          
-          // Auto-scroll
-          setTimeout(() => {
-            const chatDiv = document.getElementById('chat-messages')
-            if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
-          }, 100)
-        })
-        .subscribe((status) => {
-          addLog(`📡 Channel status: ${status}`)
-          
-          if (status === 'SUBSCRIBED') {
-            addLog(`✅ Successfully subscribed!`)
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            addLog(`❌ Channel error (${status}) - retrying in 2s...`)
-            // Retry after 2 seconds
-            setTimeout(() => subscribeToMessages(sessionId), 2000)
-          }
-        })
-    }, 500) // Small delay for cleanup
   }
 
   const sendMessage = async () => {
@@ -335,6 +339,82 @@ export default function SimpleDebugPage() {
       addLog(`✉️ You sent: ${messageInput}`)
     } catch (err: any) {
       addLog(`❌ Failed to send: ${err.message}`)
+    }
+  }
+
+  // NEW: Upload image function
+  const uploadImage = async (file: File) => {
+    if (!currentSession || !session) {
+      addLog('❌ No active chat session')
+      return
+    }
+
+    setUploading(true)
+    addLog(`📤 Uploading image: ${file.name}...`)
+
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${session.guest_id}/${currentSession.id}/${Date.now()}.${fileExt}`
+      const filePath = `chat-images/${fileName}`
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath)
+
+      // Send message with image URL
+      const message = {
+        session_id: currentSession.id,
+        sender_id: session.guest_id,
+        sender_is_guest: true,
+        sender_display_name: session.display_name,
+        content: `📷 Image: ${publicUrl}`,
+        created_at: new Date().toISOString()
+      }
+
+      const { error: messageError } = await supabase.from('messages').insert(message)
+      
+      if (messageError) throw messageError
+      
+      addLog(`✅ Image uploaded and shared!`)
+      
+    } catch (err: any) {
+      addLog(`❌ Failed to upload image: ${err.message}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // NEW: Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      addLog('❌ Please select an image file')
+      return
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      addLog('❌ Image must be less than 5MB')
+      return
+    }
+
+    uploadImage(file)
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -399,7 +479,7 @@ export default function SimpleDebugPage() {
   return (
     <div style={{ padding: '20px', fontFamily: 'monospace', maxWidth: '800px', margin: '0 auto', background: '#0a0a1a', minHeight: '100vh', color: '#fff' }}>
       <h1 style={{ color: '#0ff', textAlign: 'center' }}>🐞 AUTO-MATCH DEBUG</h1>
-      <p style={{ textAlign: 'center', color: '#999', marginBottom: '20px' }}>Now with 500ms SUPER aggressive polling!</p>
+      <p style={{ textAlign: 'center', color: '#999', marginBottom: '20px' }}>Now with 500ms SUPER aggressive polling + 📷 Image Sharing!</p>
       
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button onClick={testConnection} style={buttonStyle}>Test Connection</button>
@@ -420,9 +500,11 @@ export default function SimpleDebugPage() {
           </>
         )}
         {inChat && (
-          <button onClick={endChat} style={{...buttonStyle, background: '#f00', color: '#fff'}}>
-            End Chat
-          </button>
+          <>
+            <button onClick={endChat} style={{...buttonStyle, background: '#f00', color: '#fff'}}>
+              End Chat
+            </button>
+          </>
         )}
         <button onClick={reset} style={{...buttonStyle, background: '#666'}}>Reset</button>
         <button onClick={() => setLogs([])} style={buttonStyle}>Clear Logs</button>
@@ -454,7 +536,7 @@ export default function SimpleDebugPage() {
           <div 
             id="chat-messages" 
             style={{ 
-              height: '200px', 
+              height: '250px', 
               overflowY: 'auto', 
               background: '#1a1a2e', 
               padding: '10px', 
@@ -464,23 +546,46 @@ export default function SimpleDebugPage() {
             }}
           >
             {messages.length === 0 ? (
-              <div style={{ color: '#666', textAlign: 'center', paddingTop: '80px' }}>No messages yet. Say hi!</div>
+              <div style={{ color: '#666', textAlign: 'center', paddingTop: '100px' }}>No messages yet. Say hi or share an image!</div>
             ) : (
-              messages.map((msg, i) => (
-                <div key={msg.id || i} style={{ 
-                  color: msg.sender_id === session?.guest_id ? '#0ff' : '#ff0', 
-                  marginBottom: '8px',
-                  padding: '5px',
-                  borderLeft: msg.sender_id === session?.guest_id ? '3px solid #0ff' : '3px solid #ff0',
-                  paddingLeft: '10px',
-                  background: msg.sender_id === session?.guest_id ? 'rgba(0,255,255,0.05)' : 'rgba(255,255,0,0.05)'
-                }}>
-                  <strong>{msg.sender_display_name}:</strong> {msg.content}
-                </div>
-              ))
+              messages.map((msg, i) => {
+                const isImage = msg.content.startsWith('📷 Image:')
+                const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
+                
+                return (
+                  <div key={msg.id || i} style={{ 
+                    color: msg.sender_id === session?.guest_id ? '#0ff' : '#ff0', 
+                    marginBottom: '12px',
+                    padding: '8px',
+                    borderLeft: msg.sender_id === session?.guest_id ? '3px solid #0ff' : '3px solid #ff0',
+                    paddingLeft: '10px',
+                    background: msg.sender_id === session?.guest_id ? 'rgba(0,255,255,0.05)' : 'rgba(255,255,0,0.05)'
+                  }}>
+                    <strong>{msg.sender_display_name}:</strong>
+                    {isImage ? (
+                      <div>
+                        <div>📷 Shared an image</div>
+                        <img 
+                          src={imageUrl} 
+                          alt="Shared" 
+                          style={{ 
+                            maxWidth: '200px', 
+                            maxHeight: '150px', 
+                            borderRadius: '8px',
+                            marginTop: '5px',
+                            border: '2px solid #333'
+                          }} 
+                        />
+                      </div>
+                    ) : (
+                      <span> {msg.content}</span>
+                    )}
+                  </div>
+                )
+              })
             )}
           </div>
-          <div style={{ display: 'flex', gap: '5px' }}>
+          <div style={{ display: 'flex', gap: '5px', marginBottom: '10px' }}>
             <input
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
@@ -498,6 +603,29 @@ export default function SimpleDebugPage() {
             />
             <button onClick={sendMessage} style={{...buttonStyle, padding: '10px 20px'}}>Send</button>
           </div>
+          
+          {/* NEW: Image upload button */}
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              accept="image/*"
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                ...buttonStyle,
+                background: uploading ? '#666' : '#f0f',
+                flex: 1,
+                opacity: uploading ? 0.5 : 1
+              }}
+            >
+              {uploading ? '📤 Uploading...' : '📷 Share Image'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -506,14 +634,14 @@ export default function SimpleDebugPage() {
         color: '#0f0', 
         padding: '15px', 
         borderRadius: '8px',
-        height: '400px',
+        height: '300px',
         overflowY: 'auto',
         fontSize: '12px',
         fontFamily: 'monospace',
         border: '1px solid #0f0'
       }}>
         {logs.length === 0 ? (
-          <div style={{ color: '#666', textAlign: 'center', paddingTop: '180px' }}>Logs will appear here...</div>
+          <div style={{ color: '#666', textAlign: 'center', paddingTop: '140px' }}>Logs will appear here...</div>
         ) : (
           logs.map((log, i) => (
             <div key={i} style={{ marginBottom: '3px', whiteSpace: 'pre-wrap' }}>{log}</div>
@@ -523,9 +651,9 @@ export default function SimpleDebugPage() {
 
       <div style={{ marginTop: '20px', color: '#999', fontSize: '13px', padding: '15px', background: '#1a1a2e', borderRadius: '8px' }}>
         <p>✅ <strong style={{ color: '#0ff' }}>500ms POLLING:</strong> Matches detect in under 1 second!</p>
-        <p>🔍 <strong style={{ color: '#ff0' }}>Force Check:</strong> Manual trigger still available</p>
+        <p>📷 <strong style={{ color: '#f0f' }}>NEW: Image Sharing:</strong> Click the pink button to share images</p>
         <p>📡 <strong style={{ color: '#0f0' }}>Auto-Retry:</strong> Channels automatically reconnect on error</p>
-        <p>🔄 <strong style={{ color: '#f0f' }}>Auto-Subscribe:</strong> useEffect handles subscription automatically</p>
+        <p>🖼️ <strong style={{ color: '#ff0' }}>Max 5MB:</strong> Images are stored in Supabase Storage</p>
       </div>
     </div>
   )
