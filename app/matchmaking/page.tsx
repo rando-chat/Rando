@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMatchmaking } from '@/hooks/useMatchmaking-FIXED'
+import { useMatchmaking } from '@/hooks/useMatchmaking'
 
 export default function MatchmakingPage() {
   const router = useRouter()
