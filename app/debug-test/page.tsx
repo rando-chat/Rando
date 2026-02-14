@@ -11,7 +11,7 @@ export default function SimpleDebugPage() {
   const [currentSession, setCurrentSession] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [messageInput, setMessageInput] = useState('')
-  const pollingRef = useRef<NodeJS.Timeout | null>(null) // ✅ FIXED: proper useRef
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
@@ -84,6 +84,11 @@ export default function SimpleDebugPage() {
     setTimeout(checkForMatch, 100)
   }
 
+  const forceCheck = async () => {
+    addLog('🔍 FORCE CHECKING NOW...')
+    await checkForMatch()
+  }
+
   const checkForMatch = async () => {
     if (!session || !inQueue) return
 
@@ -110,28 +115,45 @@ export default function SimpleDebugPage() {
         return
       }
 
-      // Get queue
-      const { data: queue } = await supabase
+      // Get ALL queue entries with full details
+      const { data: queue, error } = await supabase
         .from('matchmaking_queue')
-        .select('user_id, display_name')
+        .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      if (queue && queue.length > 0) {
-        addLog(`📊 Queue: ${queue.map(u => u.display_name).join(', ')}`)
+      if (error) {
+        addLog(`❌ Queue error: ${error.message}`)
+        return
       }
 
-      const partner = queue?.find(u => u.user_id !== session.guest_id)
+      // Log full queue
+      if (queue && queue.length > 0) {
+        addLog(`📊 QUEUE (${queue.length} users):`)
+        queue.forEach((entry, i) => {
+          const isMe = entry.user_id === session.guest_id
+          addLog(`   ${i+1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''} - entered: ${new Date(entry.entered_at).toLocaleTimeString()}`)
+        })
+      } else {
+        addLog('📭 Queue is empty')
+        return
+      }
 
-      if (partner) {
-        addLog(`👥 Found partner: ${partner.display_name}`)
-        
-        const shouldCreate = session.guest_id < partner.user_id
-        addLog(`🎲 ${shouldCreate ? 'I create' : 'Partner creates'} session`)
+      // Find partner (not yourself)
+      const partner = queue.find(u => u.user_id !== session.guest_id)
 
-        if (shouldCreate) {
-          await createChatSession(partner)
-        }
+      if (!partner) {
+        addLog('⏳ No other users in queue')
+        return
+      }
+
+      addLog(`🎯 Found partner: ${partner.display_name}`)
+      
+      const shouldCreate = session.guest_id < partner.user_id
+      addLog(`🎲 ${shouldCreate ? 'I CREATE session' : 'WAITING for partner to create'}`)
+
+      if (shouldCreate) {
+        await createChatSession(partner)
       }
 
     } catch (err: any) {
@@ -143,12 +165,14 @@ export default function SimpleDebugPage() {
     try {
       addLog('🔨 Creating chat session...')
       
-      await supabase
+      const { error: updateError } = await supabase
         .from('matchmaking_queue')
         .update({ matched_at: new Date().toISOString() })
         .in('user_id', [session.guest_id, partner.user_id])
 
-      const { data: newSession, error } = await supabase
+      if (updateError) throw updateError
+
+      const { data: newSession, error: insertError } = await supabase
         .from('chat_sessions')
         .insert({
           user1_id: session.guest_id,
@@ -161,10 +185,11 @@ export default function SimpleDebugPage() {
         .select()
         .single()
 
-      if (error) throw error
+      if (insertError) throw insertError
 
-      addLog(`✅ Session created: ${newSession.id.slice(0, 8)}...`)
+      addLog(`✅ Session created! ID: ${newSession.id.slice(0, 8)}...`)
       
+      // Remove from queue
       await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
 
       if (pollingRef.current) {
@@ -226,6 +251,7 @@ export default function SimpleDebugPage() {
         created_at: new Date().toISOString()
       })
       setMessageInput('')
+      addLog(`✉️ You sent: ${messageInput}`)
     } catch (err: any) {
       addLog(`❌ Failed to send: ${err.message}`)
     }
@@ -265,9 +291,14 @@ export default function SimpleDebugPage() {
           <button onClick={testQueue} style={buttonStyle}>Join Queue</button>
         )}
         {inQueue && (
-          <button onClick={leaveQueue} style={{...buttonStyle, background: '#ff0', color: '#000'}}>
-            Leave Queue
-          </button>
+          <>
+            <button onClick={forceCheck} style={{...buttonStyle, background: '#ff0', color: '#000'}}>
+              🔍 Force Check
+            </button>
+            <button onClick={leaveQueue} style={{...buttonStyle, background: '#f00', color: '#fff'}}>
+              Leave Queue
+            </button>
+          </>
         )}
         {inChat && (
           <button onClick={endChat} style={{...buttonStyle, background: '#f00', color: '#fff'}}>
@@ -335,8 +366,8 @@ export default function SimpleDebugPage() {
       </div>
 
       <div style={{ marginTop: '20px', color: '#999', fontSize: '12px' }}>
-        <p>✅ Test complete flow: Create Guest → Join Queue → Wait for match → Send messages</p>
-        <p>📱 Open on two phones and watch them connect!</p>
+        <p>✅ Click <strong style={{ color: '#ff0' }}>Force Check</strong> on one phone to force match</p>
+        <p>📱 If they don't match, check if both are in the same queue</p>
       </div>
     </div>
   )
