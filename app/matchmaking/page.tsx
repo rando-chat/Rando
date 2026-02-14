@@ -51,7 +51,7 @@ export default function MatchmakingPage() {
 
         setIsInitializing(false)
         
-        // 🔥 START POLLING IMMEDIATELY - even before user clicks anything
+        // START POLLING IMMEDIATELY
         addLog('⏱️ Starting background polling (checking for existing matches)...')
         startPolling()
         
@@ -83,7 +83,7 @@ export default function MatchmakingPage() {
     pollingRef.current = setInterval(() => checkForMatch(), 500)
   }
 
-  // Check for match - ALWAYS RUNS (no isInQueue check)
+  // Check for match - FIXED VERSION
   const checkForMatch = async () => {
     addLog('🔍 Polling... checking for match')
     
@@ -112,9 +112,23 @@ export default function MatchmakingPage() {
         return
       }
 
-      // Only proceed if we're in queue
-      if (!isInQueue) {
-        addLog('⏸️ Not in queue - waiting for user to join')
+      // Always check queue status from DB
+      const { data: myQueueEntry } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .eq('user_id', session.guest_id)
+        .is('matched_at', null)
+        .maybeSingle()
+
+      const amIInQueue = !!myQueueEntry
+
+      // Update UI state to match DB
+      if (amIInQueue !== isInQueue) {
+        setIsInQueue(amIInQueue)
+      }
+
+      if (!amIInQueue) {
+        addLog('⏸️ Not in queue (verified)')
         return
       }
 
@@ -185,7 +199,7 @@ export default function MatchmakingPage() {
     }
   }
 
-  // "Start Chatting" now just JOINS QUEUE
+  // FIXED handleStartChatting with delay after queue insert
   const handleStartChatting = async () => {
     if (!session) return
 
@@ -197,7 +211,7 @@ export default function MatchmakingPage() {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
       // Join queue
-      await supabase.from('matchmaking_queue').insert({
+      const { error } = await supabase.from('matchmaking_queue').insert({
         user_id: session.guest_id,
         display_name: session.display_name,
         is_guest: true,
@@ -206,13 +220,19 @@ export default function MatchmakingPage() {
         entered_at: new Date().toISOString()
       })
 
+      if (error) throw error
+
       addLog('✅ Joined queue')
       setIsInQueue(true)
       setEstimatedWait(30)
       
+      // CRITICAL: Wait for database to commit
+      addLog('⏱️ Waiting for queue to stabilize...')
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
       // Force an immediate check
       addLog('🔍 FORCE CHECKING NOW...')
-      setTimeout(() => checkForMatch(), 100)
+      await checkForMatch()
       
     } catch (err) {
       addLog(`❌ Join error: ${err}`)
@@ -223,12 +243,19 @@ export default function MatchmakingPage() {
 
   const handleCancel = async () => {
     addLog('🚪 Cancelling...')
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
     if (session) {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
     setIsInQueue(false)
     setEstimatedWait(30)
     addLog('✅ Cancelled')
+    
+    // Restart polling for next attempt
+    startPolling()
   }
 
   // Cleanup on unmount
