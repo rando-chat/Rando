@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 export default function SimpleDebugPage() {
@@ -11,7 +11,7 @@ export default function SimpleDebugPage() {
   const [currentSession, setCurrentSession] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [messageInput, setMessageInput] = useState('')
-  const pollingRef = useState<any>(null)[1]
+  const pollingRef = useRef<NodeJS.Timeout | null>(null) // ✅ FIXED: proper useRef
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
@@ -77,8 +77,10 @@ export default function SimpleDebugPage() {
 
   const startMatchChecking = () => {
     addLog('⏱️ Checking for match every 2 seconds...')
-    const interval = setInterval(checkForMatch, 2000)
-    pollingRef.current = interval
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+    }
+    pollingRef.current = setInterval(checkForMatch, 2000)
     setTimeout(checkForMatch, 100)
   }
 
@@ -95,8 +97,11 @@ export default function SimpleDebugPage() {
         .maybeSingle()
 
       if (existingSession) {
-        addLog(`✅ MATCH FOUND! Session: ${existingSession.id}`)
-        if (pollingRef.current) clearInterval(pollingRef.current)
+        addLog(`✅ MATCH FOUND! Session: ${existingSession.id.slice(0, 8)}...`)
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current)
+          pollingRef.current = null
+        }
         setInQueue(false)
         setInChat(true)
         setCurrentSession(existingSession)
@@ -158,11 +163,14 @@ export default function SimpleDebugPage() {
 
       if (error) throw error
 
-      addLog(`✅ Session created: ${newSession.id}`)
+      addLog(`✅ Session created: ${newSession.id.slice(0, 8)}...`)
       
       await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
 
-      if (pollingRef.current) clearInterval(pollingRef.current)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
       setInQueue(false)
       setInChat(true)
       setCurrentSession(newSession)
@@ -212,6 +220,7 @@ export default function SimpleDebugPage() {
       await supabase.from('messages').insert({
         session_id: currentSession.id,
         sender_id: session.guest_id,
+        sender_is_guest: true,
         sender_display_name: session.display_name,
         content: messageInput,
         created_at: new Date().toISOString()
@@ -224,10 +233,25 @@ export default function SimpleDebugPage() {
 
   const leaveQueue = async () => {
     if (!session) return
-    if (pollingRef.current) clearInterval(pollingRef.current)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
     await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     setInQueue(false)
     addLog('🚪 Left queue')
+  }
+
+  const endChat = async () => {
+    if (!currentSession) return
+    await supabase
+      .from('chat_sessions')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .eq('id', currentSession.id)
+    setInChat(false)
+    setCurrentSession(null)
+    setMessages([])
+    addLog('👋 Chat ended')
   }
 
   return (
@@ -237,7 +261,7 @@ export default function SimpleDebugPage() {
       <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button onClick={testConnection} style={buttonStyle}>Test Connection</button>
         <button onClick={testGuestSession} style={buttonStyle}>Create Guest</button>
-        {!inQueue && !inChat && (
+        {!inQueue && !inChat && session && (
           <button onClick={testQueue} style={buttonStyle}>Join Queue</button>
         )}
         {inQueue && (
@@ -245,26 +269,35 @@ export default function SimpleDebugPage() {
             Leave Queue
           </button>
         )}
+        {inChat && (
+          <button onClick={endChat} style={{...buttonStyle, background: '#f00', color: '#fff'}}>
+            End Chat
+          </button>
+        )}
         <button onClick={() => setLogs([])} style={buttonStyle}>Clear Logs</button>
       </div>
 
       {session && (
         <div style={{ background: '#1a1a2e', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
-          <div><strong style={{ color: '#0ff' }}>Name:</strong> <span style={{ color: '#ff0' }}>{session.display_name}</span></div>
+          <div><strong style={{ color: '#0ff' }}>Name:</strong> <span style={{ color: '#ff0', fontWeight: 'bold' }}>{session.display_name}</span></div>
           <div><strong style={{ color: '#0ff' }}>ID:</strong> {session.guest_id.slice(0, 8)}...</div>
           <div><strong style={{ color: '#0ff' }}>Status:</strong> {inChat ? 'IN CHAT' : (inQueue ? 'IN QUEUE' : 'IDLE')}</div>
         </div>
       )}
 
       {inChat && currentSession && (
-        <div style={{ background: '#16213e', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
+        <div style={{ background: '#16213e', padding: '10px', borderRadius: '5px', marginBottom: '20px', border: '1px solid #0f0' }}>
           <h3 style={{ color: '#0f0' }}>💬 CHAT ACTIVE</h3>
-          <div style={{ height: '150px', overflowY: 'auto', background: '#1a1a2e', padding: '5px', marginBottom: '10px' }}>
-            {messages.map((msg, i) => (
-              <div key={i} style={{ color: msg.sender_id === session.guest_id ? '#0ff' : '#ff0' }}>
-                <strong>{msg.sender_display_name}:</strong> {msg.content}
-              </div>
-            ))}
+          <div style={{ height: '150px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
+            {messages.length === 0 ? (
+              <div style={{ color: '#666', textAlign: 'center' }}>No messages yet</div>
+            ) : (
+              messages.map((msg, i) => (
+                <div key={i} style={{ color: msg.sender_id === session.guest_id ? '#0ff' : '#ff0', marginBottom: '5px' }}>
+                  <strong>{msg.sender_display_name}:</strong> {msg.content}
+                </div>
+              ))
+            )}
           </div>
           <div style={{ display: 'flex', gap: '5px' }}>
             <input
@@ -272,7 +305,14 @@ export default function SimpleDebugPage() {
               onChange={(e) => setMessageInput(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
               placeholder="Type a message..."
-              style={{ flex: 1, padding: '5px' }}
+              style={{ 
+                flex: 1, 
+                padding: '8px',
+                background: '#1a1a2e',
+                border: '1px solid #0ff',
+                borderRadius: '4px',
+                color: '#fff'
+              }}
             />
             <button onClick={sendMessage} style={buttonStyle}>Send</button>
           </div>
@@ -286,15 +326,17 @@ export default function SimpleDebugPage() {
         borderRadius: '5px',
         height: '400px',
         overflowY: 'auto',
-        fontSize: '12px'
+        fontSize: '12px',
+        fontFamily: 'monospace'
       }}>
         {logs.map((log, i) => (
-          <div key={i}>{log}</div>
+          <div key={i} style={{ marginBottom: '2px', whiteSpace: 'pre-wrap' }}>{log}</div>
         ))}
       </div>
 
-      <div style={{ marginTop: '20px', color: '#999' }}>
+      <div style={{ marginTop: '20px', color: '#999', fontSize: '12px' }}>
         <p>✅ Test complete flow: Create Guest → Join Queue → Wait for match → Send messages</p>
+        <p>📱 Open on two phones and watch them connect!</p>
       </div>
     </div>
   )
@@ -306,5 +348,6 @@ const buttonStyle = {
   border: 'none',
   borderRadius: '4px',
   cursor: 'pointer',
-  fontWeight: 'bold'
+  fontWeight: 'bold',
+  fontSize: '14px'
 }
