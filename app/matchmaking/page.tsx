@@ -12,6 +12,12 @@ export default function MatchmakingPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const [logs, setLogs] = useState<string[]>([])
+
+  const addLog = (msg: string) => {
+    console.log(msg)
+    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
+  }
 
   // Generate UUID fallback
   const generateUUID = () => {
@@ -26,6 +32,7 @@ export default function MatchmakingPage() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        addLog('🎨 Creating guest session...')
         const { data, error } = await supabase.rpc('create_guest_session', {
           p_ip_address: null,
           p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
@@ -37,14 +44,14 @@ export default function MatchmakingPage() {
         if (data && data.length > 0) {
           const guestSession = data[0]
           setSession(guestSession)
+          addLog(`✅ Got fun name: ${guestSession.display_name}`)
         } else {
           throw new Error('No guest session')
         }
 
         setIsInitializing(false)
       } catch (err) {
-        console.error('Init error:', err)
-        // Fallback to local UUID
+        addLog(`❌ Init error: ${err}`)
         const uuid = generateUUID()
         setSession({
           guest_id: uuid,
@@ -57,12 +64,18 @@ export default function MatchmakingPage() {
     initialize()
   }, [])
 
-  // Check for match - FIXED VERSION
+  // Check for match - with detailed logging
   const checkForMatch = async () => {
-    if (!session) return
+    addLog('🔍 Polling... checking for match')
+    
+    if (!session) {
+      addLog('❌ No session')
+      return
+    }
 
     try {
-      // Check for existing session FIRST (critical for the waiting user)
+      // Check for existing session FIRST
+      addLog('🔍 Checking for existing chat...')
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -71,7 +84,7 @@ export default function MatchmakingPage() {
         .maybeSingle()
 
       if (existingSession) {
-        console.log('Match found! Redirecting to chat...')
+        addLog(`✅ MATCH FOUND! Session: ${existingSession.id.slice(0, 8)}...`)
         if (pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
@@ -80,24 +93,37 @@ export default function MatchmakingPage() {
         return
       }
 
-      if (!isInQueue) return
+      if (!isInQueue) {
+        addLog('⏸️ Not in queue - skipping')
+        return
+      }
 
       // Get queue
+      addLog('🔍 Fetching queue...')
       const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      if (!queue || queue.length === 0) return
+      if (!queue || queue.length === 0) {
+        addLog('📭 Queue empty')
+        return
+      }
 
+      addLog(`📊 Queue has ${queue.length} users`)
+      
       const partner = queue.find(u => u.user_id !== session.guest_id)
-      if (!partner) return
+      if (!partner) {
+        addLog('⏳ No partner found')
+        return
+      }
 
-      // 🔥 CRITICAL FIX: One creates, the other waits
+      addLog(`🎯 Found partner: ${partner.display_name}`)
+
+      // One creates, the other waits
       if (session.guest_id < partner.user_id) {
-        // I CREATE the session
-        console.log('Creating session...')
+        addLog('🎲 I CREATE session')
         
         // Mark both as matched
         await supabase
@@ -106,6 +132,7 @@ export default function MatchmakingPage() {
           .in('user_id', [session.guest_id, partner.user_id])
 
         // Create chat session
+        addLog('🔨 Creating chat session...')
         const { data: newSession } = await supabase
           .from('chat_sessions')
           .insert({
@@ -120,7 +147,7 @@ export default function MatchmakingPage() {
           .single()
 
         if (newSession) {
-          // Clean up queue
+          addLog(`✅ Session created! ID: ${newSession.id.slice(0, 8)}...`)
           await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
           
           if (pollingRef.current) {
@@ -131,13 +158,11 @@ export default function MatchmakingPage() {
           router.push(`/chat/${newSession.id}`)
         }
       } else {
-        // I WAIT for partner to create
-        console.log('Waiting for partner to create session...')
-        // Just continue polling - the existing session check at the top will catch it
+        addLog('🎲 WAITING for partner to create')
         setEstimatedWait(prev => Math.max(5, prev - 1))
       }
     } catch (err) {
-      console.error('Match check error:', err)
+      addLog(`❌ Error: ${err}`)
     }
   }
 
@@ -145,6 +170,8 @@ export default function MatchmakingPage() {
     if (!session) return
 
     setIsLoading(true)
+    addLog('🎯 Joining queue...')
+    
     try {
       // Clean up any old queue entries
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
@@ -159,21 +186,24 @@ export default function MatchmakingPage() {
         entered_at: new Date().toISOString()
       })
 
+      addLog('✅ Joined queue')
       setIsInQueue(true)
       setEstimatedWait(30)
       
-      // Start polling - 500ms like debug page
-      setTimeout(checkForMatch, 100)
-      pollingRef.current = setInterval(checkForMatch, 500)
+      // Start polling - 500ms
+      addLog('⏱️ Starting 500ms polling...')
+      setTimeout(() => checkForMatch(), 100)
+      pollingRef.current = setInterval(() => checkForMatch(), 500)
       
     } catch (err) {
-      console.error('Start error:', err)
+      addLog(`❌ Join error: ${err}`)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleCancel = async () => {
+    addLog('🚪 Cancelling...')
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
       pollingRef.current = null
@@ -183,6 +213,7 @@ export default function MatchmakingPage() {
     }
     setIsInQueue(false)
     setEstimatedWait(30)
+    addLog('✅ Cancelled')
   }
 
   // Cleanup on unmount
@@ -235,19 +266,18 @@ export default function MatchmakingPage() {
         background: 'white',
         borderRadius: 20,
         padding: 40,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        textAlign: 'center'
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
         {!isInQueue ? (
           <>
-            <div style={{ fontSize: 48, marginBottom: 20 }}>💬</div>
-            <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 10, color: '#1f2937' }}>
+            <div style={{ fontSize: 48, marginBottom: 20, textAlign: 'center' }}>💬</div>
+            <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 10, color: '#1f2937', textAlign: 'center' }}>
               Start Chatting
             </h1>
-            <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 10 }}>
+            <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 10, textAlign: 'center' }}>
               You will be matched with a random stranger
             </p>
-            <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 30 }}>
+            <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 30, textAlign: 'center' }}>
               Chatting as: <strong style={{ color: '#667eea' }}>{session?.display_name || 'Loading...'}</strong>
             </p>
 
@@ -283,11 +313,11 @@ export default function MatchmakingPage() {
               animation: 'spin 1s linear infinite'
             }} />
             
-            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: '#1f2937' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8, color: '#1f2937', textAlign: 'center' }}>
               Finding your match...
             </h2>
             
-            <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 8 }}>
+            <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 8, textAlign: 'center' }}>
               Looking for someone interesting to talk to
             </p>
 
@@ -299,7 +329,10 @@ export default function MatchmakingPage() {
               fontSize: 14,
               color: '#667eea',
               fontWeight: 600,
-              marginBottom: 24
+              marginBottom: 24,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              textAlign: 'center'
             }}>
               {estimatedWait}s
               <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 4 }}>
@@ -318,11 +351,34 @@ export default function MatchmakingPage() {
                 border: '2px solid #e5e7eb',
                 borderRadius: 8,
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                display: 'block',
+                margin: '0 auto'
               }}
             >
               Cancel
             </button>
+
+            {/* Debug logs */}
+            <div style={{
+              marginTop: 30,
+              padding: 15,
+              background: '#1a1a2e',
+              color: '#0f0',
+              borderRadius: 8,
+              fontFamily: 'monospace',
+              fontSize: 12,
+              maxHeight: 200,
+              overflowY: 'auto'
+            }}>
+              {logs.length === 0 ? (
+                <div style={{ color: '#666', textAlign: 'center' }}>Logs will appear here...</div>
+              ) : (
+                logs.map((log, i) => (
+                  <div key={i} style={{ marginBottom: 3 }}>{log}</div>
+                ))
+              )}
+            </div>
           </>
         )}
       </div>
