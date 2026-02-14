@@ -1,650 +1,137 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
-export default function FullTestDebugPage() {
+export default function SimpleDebugPage() {
   const [logs, setLogs] = useState<string[]>([])
-  const [myUserId, setMyUserId] = useState<string | null>(null)
-  const [myDisplayName, setMyDisplayName] = useState<string>('')
-  const [isInQueue, setIsInQueue] = useState(false)
-  const [inChat, setInChat] = useState(false)
-  const [currentSession, setCurrentSession] = useState<any>(null)
-  const [messages, setMessages] = useState<any[]>([])
-  const [messageInput, setMessageInput] = useState('')
-  const [deviceId, setDeviceId] = useState<string>('')
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const messageSubscriptionRef = useRef<any>(null)
+  const [session, setSession] = useState<any>(null)
+  const [error, setError] = useState<string>('')
 
-  const addLog = (message: string, type: 'info' | 'success' | 'error' | 'warn' = 'info') => {
-    const time = new Date().toLocaleTimeString()
-    setLogs(prev => [...prev, `[${time}] ${message}`])
-    console.log(`[${type.toUpperCase()}]`, message)
+  const addLog = (msg: string) => {
+    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
   }
 
-  // Initialize connection and get fun name
-  const initialize = async () => {
-    addLog('🚀 Initializing connection...', 'info')
-    
+  const testConnection = async () => {
     try {
-      // Test connection
+      addLog('🔍 Testing Supabase connection...')
       const { error } = await supabase.from('matchmaking_queue').select('count').limit(1)
       if (error) throw error
-      addLog('✅ Connected to Supabase', 'success')
-
-      // Create guest session with fun name
-      const { data: guestSession, error: guestError } = await supabase
-        .rpc('create_guest_session', {
-          p_ip_address: null,
-          p_user_agent: navigator.userAgent,
-          p_country_code: null
-        })
-
-      if (guestError) throw guestError
-
-      if (guestSession && guestSession.length > 0) {
-        const session = guestSession[0]
-        setMyUserId(session.guest_id)
-        setMyDisplayName(session.display_name)
-        setDeviceId(session.guest_id.slice(0, 8))
-        addLog(`✨ Got fun name: ${session.display_name}`, 'success')
-        addLog(`🆔 Device ID: ${session.guest_id.slice(0, 8)}...`, 'info')
-      }
+      addLog('✅ Connection OK')
     } catch (err: any) {
-      addLog(`❌ Initialization failed: ${err.message}`, 'error')
+      addLog(`❌ Connection failed: ${err.message}`)
     }
   }
 
-  // Join matchmaking queue
-  const joinQueue = async () => {
-    if (!myUserId) {
-      addLog('❌ Initialize first!', 'error')
-      return
-    }
-
-    addLog('🎯 Joining matchmaking queue...', 'info')
-
+  const testGuestSession = async () => {
     try {
-      // Clear any existing queue entries
-      await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
+      addLog('🎨 Creating guest session...')
+      const { data, error } = await supabase.rpc('create_guest_session')
+      if (error) throw error
+      
+      if (data && data.length > 0) {
+        const session = data[0]
+        setSession(session)
+        addLog(`✅ Got fun name: ${session.display_name}`)
+        addLog(`   Session token: ${session.session_token.slice(0, 8)}...`)
+      }
+    } catch (err: any) {
+      addLog(`❌ Failed: ${err.message}`)
+    }
+  }
+
+  const testQueue = async () => {
+    try {
+      if (!session) {
+        addLog('❌ Create guest session first')
+        return
+      }
+
+      addLog('🎯 Joining queue...')
+      
+      // Leave queue first
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
       // Join queue
       const { error } = await supabase.from('matchmaking_queue').insert({
-        user_id: myUserId,
-        display_name: myDisplayName,
+        user_id: session.guest_id,
+        display_name: session.display_name,
         is_guest: true,
         tier: 'free',
         interests: [],
-        matched_at: null,
-        entered_at: new Date().toISOString(),
+        entered_at: new Date().toISOString()
       })
 
       if (error) throw error
+      addLog('✅ Joined queue')
 
-      addLog(`✅ Joined queue as ${myDisplayName}`, 'success')
-      setIsInQueue(true)
-
-      // Start polling for matches
-      pollingRef.current = setInterval(checkForMatch, 2000)
-      setTimeout(checkForMatch, 500)
-
-    } catch (err: any) {
-      addLog(`❌ Failed to join queue: ${err.message}`, 'error')
-    }
-  }
-
-  // Check for match with enhanced debugging
-  const checkForMatch = async () => {
-    if (!myUserId || !isInQueue) return
-
-    try {
-      // Check if we're already in a chat
-      const { data: existingSession } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .or(`user1_id.eq.${myUserId},user2_id.eq.${myUserId}`)
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (existingSession) {
-        addLog(`✅ MATCH FOUND! Session ID: ${existingSession.id}`, 'success')
-        
-        const partnerName = existingSession.user1_id === myUserId 
-          ? existingSession.user2_display_name 
-          : existingSession.user1_display_name
-        
-        addLog(`👥 Partner: ${partnerName}`, 'success')
-        
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
-        
-        setIsInQueue(false)
-        setInChat(true)
-        setCurrentSession(existingSession)
-        
-        subscribeToMessages(existingSession.id)
-        loadMessages(existingSession.id)
-        
-        return
-      }
-
-      // DEBUG: Get ALL queue entries with full details
-      const { data: queue, error } = await supabase
+      // Check queue
+      const { data: queue } = await supabase
         .from('matchmaking_queue')
-        .select('*')
+        .select('display_name')
         .is('matched_at', null)
-        .order('entered_at', { ascending: true })
-
-      if (error) {
-        addLog(`❌ Queue error: ${error.message}`, 'error')
-        return
-      }
-
-      // DEBUG: Log full queue details
-      addLog(`📊 QUEUE DEBUG - Total: ${queue?.length || 0} users`, 'info')
       
-      if (queue && queue.length > 0) {
-        queue.forEach((entry, i) => {
-          const isMe = entry.user_id === myUserId
-          addLog(`   ${i+1}. ${entry.display_name} (${entry.user_id.slice(0,8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
-          addLog(`      Entered: ${new Date(entry.entered_at).toLocaleTimeString()}`, 'info')
-        })
-
-        // Find potential partner (not yourself)
-        const partner = queue.find(e => e.user_id !== myUserId)
-        
-        if (partner) {
-          addLog(`🎯 Found potential partner: ${partner.display_name}`, 'success')
-          
-          // Deterministic matching: smaller user_id creates session
-          const shouldCreate = myUserId < partner.user_id
-          addLog(`   Should I create? ${shouldCreate ? 'YES' : 'NO'}`, 'info')
-
-          if (shouldCreate) {
-            addLog('   🔨 Creating chat session...', 'info')
-            
-            // Mark both as matched
-            const { error: updateError } = await supabase
-              .from('matchmaking_queue')
-              .update({ matched_at: new Date().toISOString() })
-              .in('user_id', [myUserId, partner.user_id])
-
-            if (updateError) {
-              addLog(`   ❌ Failed to mark matched: ${updateError.message}`, 'error')
-              return
-            }
-
-            // Create session
-            const { data: session, error: sessionError } = await supabase
-              .from('chat_sessions')
-              .insert({
-                user1_id: myUserId,
-                user2_id: partner.user_id,
-                user1_display_name: myDisplayName,
-                user2_display_name: partner.display_name,
-                status: 'active',
-                started_at: new Date().toISOString(),
-              })
-              .select()
-              .single()
-
-            if (sessionError) {
-              addLog(`   ❌ Session creation failed: ${sessionError.message}`, 'error')
-              // Rollback
-              await supabase
-                .from('matchmaking_queue')
-                .update({ matched_at: null })
-                .in('user_id', [myUserId, partner.user_id])
-              return
-            }
-
-            addLog(`   ✅ Session created! ID: ${session.id.slice(0,8)}...`, 'success')
-            
-            // Remove from queue
-            await supabase.from('matchmaking_queue').delete().in('user_id', [myUserId, partner.user_id])
-
-            if (pollingRef.current) {
-              clearInterval(pollingRef.current)
-              pollingRef.current = null
-            }
-            
-            setIsInQueue(false)
-            setInChat(true)
-            setCurrentSession(session)
-            
-            subscribeToMessages(session.id)
-            loadMessages(session.id)
-          } else {
-            addLog('   ⏳ Waiting for partner to create session...', 'warn')
-          }
-        } else {
-          addLog('   ⏳ No other users in queue', 'warn')
-        }
-      } else {
-        addLog('   📭 Queue is empty', 'warn')
-      }
-
+      addLog(`📊 Queue has ${queue?.length || 0} users`)
+      
     } catch (err: any) {
-      addLog(`❌ Polling error: ${err.message}`, 'error')
+      addLog(`❌ Failed: ${err.message}`)
     }
   }
-
-  // Load messages for a session
-  const loadMessages = async (sessionId: string) => {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
-
-    if (data) {
-      setMessages(data)
-      data.forEach(msg => {
-        const sender = msg.sender_id === myUserId ? 'You' : msg.sender_display_name
-        addLog(`💬 ${sender}: ${msg.content}`, 'info')
-      })
-    }
-  }
-
-  // Subscribe to new messages
-  const subscribeToMessages = (sessionId: string) => {
-    messageSubscriptionRef.current = supabase
-      .channel('messages')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `session_id=eq.${sessionId}`,
-      }, (payload) => {
-        const newMsg = payload.new
-        setMessages(prev => [...prev, newMsg])
-        
-        const sender = newMsg.sender_id === myUserId ? 'You' : newMsg.sender_display_name
-        addLog(`💬 ${sender}: ${newMsg.content}`, 'info')
-        
-        // Auto-scroll to bottom
-        setTimeout(() => {
-          const chatContainer = document.getElementById('chat-messages')
-          if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight
-        }, 100)
-      })
-      .subscribe()
-  }
-
-  // Send a message
-  const sendMessage = async () => {
-    if (!messageInput.trim() || !currentSession || !myUserId) return
-
-    try {
-      const { error } = await supabase.from('messages').insert({
-        session_id: currentSession.id,
-        sender_id: myUserId,
-        sender_is_guest: true,
-        sender_display_name: myDisplayName,
-        content: messageInput,
-        created_at: new Date().toISOString(),
-      })
-
-      if (error) throw error
-
-      setMessageInput('')
-      addLog(`✉️ You sent: ${messageInput}`, 'success')
-
-    } catch (err: any) {
-      addLog(`❌ Failed to send: ${err.message}`, 'error')
-    }
-  }
-
-  // Leave queue
-  const leaveQueue = async () => {
-    if (!myUserId) return
-
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-
-    await supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
-    setIsInQueue(false)
-    addLog('🚪 Left queue', 'warn')
-  }
-
-  // End chat
-  const endChat = async () => {
-    if (!currentSession) return
-
-    if (messageSubscriptionRef.current) {
-      supabase.removeChannel(messageSubscriptionRef.current)
-    }
-
-    await supabase
-      .from('chat_sessions')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .eq('id', currentSession.id)
-
-    setInChat(false)
-    setCurrentSession(null)
-    setMessages([])
-    addLog('👋 Chat ended', 'warn')
-  }
-
-  // Reset everything
-  const reset = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
-    if (messageSubscriptionRef.current) {
-      supabase.removeChannel(messageSubscriptionRef.current)
-    }
-    
-    // Clean up queue
-    if (myUserId) {
-      supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
-    }
-    
-    setMyUserId(null)
-    setMyDisplayName('')
-    setIsInQueue(false)
-    setInChat(false)
-    setCurrentSession(null)
-    setMessages([])
-    setLogs([])
-    
-    addLog('🔄 Reset complete. Click Initialize to start.', 'info')
-  }
-
-  useEffect(() => {
-    addLog('🎮 FULL APP TEST DEBUG PAGE', 'info')
-    addLog('Open this page on TWO devices to test matching!', 'warn')
-    addLog('1. Click Initialize on both devices', 'info')
-    addLog('2. Click Join Queue on both devices', 'info')
-    addLog('3. Watch them match automatically!', 'info')
-    
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current)
-      if (messageSubscriptionRef.current) {
-        supabase.removeChannel(messageSubscriptionRef.current)
-      }
-    }
-  }, [])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#1a1a2e', padding: 20, color: '#fff' }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 30 }}>
-          <h1 style={{ fontSize: 32, color: '#0ff', marginBottom: 10 }}>
-            🎮 FULL APP TEST DEBUG
-          </h1>
-          <p style={{ color: '#ccc' }}>
-            Open this page on TWO devices to test the complete flow
-          </p>
+    <div style={{ padding: '20px', fontFamily: 'monospace' }}>
+      <h1 style={{ color: '#0ff' }}>🐞 SIMPLE DEBUG PAGE</h1>
+      
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+        <button onClick={testConnection} style={buttonStyle}>
+          Test Connection
+        </button>
+        <button onClick={testGuestSession} style={buttonStyle}>
+          Create Guest Session
+        </button>
+        <button onClick={testQueue} style={buttonStyle}>
+          Join Queue
+        </button>
+        <button onClick={() => setLogs([])} style={buttonStyle}>
+          Clear Logs
+        </button>
+      </div>
+
+      {session && (
+        <div style={{ background: '#1a1a2e', padding: '10px', borderRadius: '5px', marginBottom: '20px' }}>
+          <div><strong style={{ color: '#0ff' }}>Session:</strong> {session.guest_id.slice(0, 8)}...</div>
+          <div><strong style={{ color: '#0ff' }}>Name:</strong> <span style={{ color: '#ff0' }}>{session.display_name}</span></div>
         </div>
+      )}
 
-        {/* Device Info */}
-        <div style={{ 
-          background: '#16213e', 
-          padding: 20, 
-          borderRadius: 10,
-          marginBottom: 20,
-          border: '1px solid #0ff'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
-            <div>
-              <strong style={{ color: '#0ff' }}>Device ID:</strong>{' '}
-              <span style={{ color: '#fff' }}>{deviceId || 'Not initialized'}</span>
-            </div>
-            <div>
-              <strong style={{ color: '#0ff' }}>Name:</strong>{' '}
-              <span style={{ color: '#ff0', fontWeight: 'bold' }}>{myDisplayName || 'Unknown'}</span>
-            </div>
-            <div>
-              <strong style={{ color: '#0ff' }}>Status:</strong>{' '}
-              <span style={{ 
-                color: inChat ? '#0f0' : (isInQueue ? '#ff0' : '#f00'),
-                fontWeight: 'bold'
-              }}>
-                {inChat ? 'IN CHAT' : (isInQueue ? 'IN QUEUE' : 'IDLE')}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div style={{ 
+        background: '#000', 
+        color: '#0f0', 
+        padding: '10px', 
+        borderRadius: '5px',
+        height: '400px',
+        overflowY: 'auto',
+        fontSize: '12px'
+      }}>
+        {logs.map((log, i) => (
+          <div key={i}>{log}</div>
+        ))}
+      </div>
 
-        {/* Controls */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-          {!myUserId && (
-            <button onClick={initialize} style={buttonStyle.primary}>
-              🚀 1. Initialize
-            </button>
-          )}
-          
-          {myUserId && !isInQueue && !inChat && (
-            <button onClick={joinQueue} style={buttonStyle.success}>
-              🎯 2. Join Queue
-            </button>
-          )}
-          
-          {isInQueue && (
-            <button onClick={leaveQueue} style={buttonStyle.warning}>
-              ⏏️ Leave Queue
-            </button>
-          )}
-          
-          {inChat && (
-            <button onClick={endChat} style={buttonStyle.danger}>
-              👋 End Chat
-            </button>
-          )}
-          
-          <button onClick={reset} style={buttonStyle.secondary}>
-            🔄 Reset
-          </button>
-          
-          <button onClick={() => setLogs([])} style={buttonStyle.secondary}>
-            🧹 Clear Logs
-          </button>
-
-          {/* New Force Check button */}
-          {isInQueue && (
-            <button 
-              onClick={checkForMatch}
-              style={buttonStyle.primary}
-            >
-              🔄 Force Check
-            </button>
-          )}
-        </div>
-
-        {/* Chat Area (shown when in chat) */}
-        {inChat && currentSession && (
-          <div style={{ 
-            background: '#16213e', 
-            padding: 20, 
-            borderRadius: 10,
-            marginBottom: 20,
-            border: '1px solid #0f0'
-          }}>
-            <h3 style={{ color: '#0f0', marginBottom: 10 }}>
-              💬 CHAT ACTIVE - Session: {currentSession.id.slice(0, 8)}...
-            </h3>
-            
-            {/* Messages */}
-            <div 
-              id="chat-messages"
-              style={{ 
-                height: 200, 
-                overflowY: 'auto', 
-                background: '#1a1a2e', 
-                padding: 10,
-                borderRadius: 5,
-                marginBottom: 10,
-                fontFamily: 'monospace'
-              }}
-            >
-              {messages.map((msg, i) => (
-                <div key={i} style={{ 
-                  marginBottom: 5,
-                  color: msg.sender_id === myUserId ? '#0ff' : '#ff0'
-                }}>
-                  <strong>{msg.sender_id === myUserId ? 'You' : msg.sender_display_name}:</strong> {msg.content}
-                </div>
-              ))}
-            </div>
-
-            {/* Message Input */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <input
-                type="text"
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message..."
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  background: '#1a1a2e',
-                  border: '1px solid #0ff',
-                  borderRadius: 5,
-                  color: '#fff'
-                }}
-              />
-              <button onClick={sendMessage} style={buttonStyle.primary}>
-                Send
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Queue Status */}
-        <div style={{ 
-          background: '#16213e', 
-          padding: 20, 
-          borderRadius: 10,
-          marginBottom: 20
-        }}>
-          <h3 style={{ color: '#0ff', marginBottom: 10 }}>📊 QUEUE STATUS</h3>
-          <button 
-            onClick={async () => {
-              const { data } = await supabase
-                .from('matchmaking_queue')
-                .select('display_name, user_id, entered_at')
-                .is('matched_at', null)
-                .order('entered_at', { ascending: true })
-              
-              if (data) {
-                addLog(`📋 Queue has ${data.length} users:`, 'info')
-                data.forEach((entry, i) => {
-                  const isMe = entry.user_id === myUserId
-                  addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0,8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
-                })
-              }
-            }}
-            style={buttonStyle.secondary}
-          >
-            🔍 Refresh Queue
-          </button>
-        </div>
-
-        {/* Instructions */}
-        <div style={{ 
-          background: '#16213e', 
-          padding: 20, 
-          borderRadius: 10,
-          marginBottom: 20
-        }}>
-          <h3 style={{ color: '#ff0', marginBottom: 10 }}>📋 TEST INSTRUCTIONS</h3>
-          <ol style={{ color: '#ccc', lineHeight: 1.8 }}>
-            <li>Open this page on <strong>TWO different devices</strong> (or two browser tabs)</li>
-            <li>Click <strong style={{ color: '#0ff' }}>Initialize</strong> on both devices</li>
-            <li>Click <strong style={{ color: '#0ff' }}>Join Queue</strong> on both devices</li>
-            <li>Click <strong style={{ color: '#0ff' }}>Force Check</strong> if they don't match automatically</li>
-            <li>Watch the logs - they should match within 2-10 seconds</li>
-            <li>Once matched, send messages between devices!</li>
-            <li>Each message appears in real-time on both devices</li>
-          </ol>
-        </div>
-
-        {/* Logs */}
-        <div style={{ 
-          background: '#0a0a1a', 
-          padding: 20, 
-          borderRadius: 10,
-          border: '1px solid #0ff'
-        }}>
-          <h3 style={{ color: '#0ff', marginBottom: 10 }}>📝 LIVE LOGS</h3>
-          <div 
-            id="logs"
-            style={{ 
-              height: 300, 
-              overflowY: 'auto', 
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: '#0f0'
-            }}
-          >
-            {logs.map((log, i) => (
-              <div key={i} style={{ marginBottom: 2, whiteSpace: 'pre-wrap' }}>{log}</div>
-            ))}
-          </div>
-        </div>
+      <div style={{ marginTop: '20px', color: '#999' }}>
+        <p>✅ This page has NO complex components - just buttons and logs</p>
+        <p>❌ If this page crashes, the issue is in your database/supabase</p>
+        <p>✅ If this page works, the issue is in your main app components</p>
       </div>
     </div>
   )
 }
 
 const buttonStyle = {
-  primary: {
-    padding: '10px 20px',
-    background: '#0ff',
-    color: '#000',
-    border: 'none',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  },
-  success: {
-    padding: '10px 20px',
-    background: '#0f0',
-    color: '#000',
-    border: 'none',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  },
-  warning: {
-    padding: '10px 20px',
-    background: '#ff0',
-    color: '#000',
-    border: 'none',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  },
-  danger: {
-    padding: '10px 20px',
-    background: '#f00',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  },
-  secondary: {
-    padding: '10px 20px',
-    background: '#666',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 5,
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px'
-  }
+  padding: '8px 16px',
+  background: '#0ff',
+  border: 'none',
+  borderRadius: '4px',
+  cursor: 'pointer',
+  fontWeight: 'bold'
 }
