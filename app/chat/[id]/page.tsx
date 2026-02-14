@@ -26,26 +26,49 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const initialize = async () => {
       try {
-        const { data: chatSession } = await supabase
+        console.log('🔍 Loading chat session:', sessionId)
+        
+        const { data: chatSession, error: sessionError } = await supabase
           .from('chat_sessions')
           .select('*')
           .eq('id', sessionId)
           .single()
 
+        if (sessionError) throw sessionError
         if (!chatSession) throw new Error('Session not found')
+        
+        console.log('✅ Chat session loaded:', chatSession)
         setSession(chatSession)
 
-        const { data } = await supabase.rpc('create_guest_session')
+        console.log('👤 Creating guest session...')
+        const { data, error: guestError } = await supabase.rpc('create_guest_session')
+        if (guestError) throw guestError
+
         if (data && data.length > 0) {
-          setGuestSession(data[0])
-          setupTypingPresence(data[0])
+          const guest = data[0]
+          console.log('✅ Guest session:', guest)
+          setGuestSession(guest)
+          
+          // Debug: Check who I am in this chat
+          console.log('🔍 Comparing IDs:')
+          console.log('  guest_id:', guest.guest_id)
+          console.log('  user1_id:', chatSession.user1_id)
+          console.log('  user2_id:', chatSession.user2_id)
+          console.log('  user1_display_name:', chatSession.user1_display_name)
+          console.log('  user2_display_name:', chatSession.user2_display_name)
+          
+          const isUser1 = guest.guest_id === chatSession.user1_id
+          console.log('  isUser1:', isUser1)
+          console.log('  partner name:', isUser1 ? chatSession.user2_display_name : chatSession.user1_display_name)
+          
+          setupTypingPresence(guest)
         }
 
-        loadMessages()
+        await loadMessages()
         subscribeToMessages()
         setLoading(false)
       } catch (err) {
-        console.error('Init error:', err)
+        console.error('❌ Init error:', err)
         setLoading(false)
       }
     }
@@ -56,7 +79,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       if (channelRef.current) supabase.removeChannel(channelRef.current)
       if (presenceRef.current) supabase.removeChannel(presenceRef.current)
       if (session?.id && session?.status === 'active') {
-        supabase.from('chat_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', session.id)
+        supabase.from('chat_sessions').update({ 
+          status: 'ended', 
+          ended_at: new Date().toISOString() 
+        }).eq('id', session.id)
       }
     }
   }, [sessionId])
@@ -67,7 +93,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
-    if (data) setMessages(data)
+    if (data) {
+      console.log('📨 Messages loaded:', data.length)
+      setMessages(data)
+    }
     scrollToBottom()
   }
 
@@ -137,6 +166,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         filter: `session_id=eq.${sessionId}`
       }, (payload) => {
         const msg = payload.new
+        console.log('📨 New message:', msg)
         setMessages(prev => {
           if (prev.some(m => m.id === msg.id)) return prev
           return [...prev, msg]
@@ -151,6 +181,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const sendMessage = async () => {
     if (!messageInput.trim() || !session || !guestSession) return
 
+    console.log('📤 Sending message:', messageInput)
+    
     await supabase.from('messages').insert({
       session_id: sessionId,
       sender_id: guestSession.guest_id,
@@ -231,7 +263,13 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     )
   }
 
-  const partnerName = session.user1_id === guestSession.guest_id ? session.user2_display_name : session.user1_display_name
+  // FIXED: Partner name logic with fallback
+  const isUser1 = guestSession.guest_id === session.user1_id
+  const partnerName = isUser1 
+    ? (session.user2_display_name || 'Anonymous') 
+    : (session.user1_display_name || 'Anonymous')
+  
+  console.log('🎯 Partner name:', partnerName, 'isUser1:', isUser1)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f9fafb' }}>
@@ -240,7 +278,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div>
-              <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>💬 {partnerName || 'Anonymous'}</h1>
+              <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>
+                💬 {partnerName}
+              </h1>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 <span style={{ display: 'inline-block', width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} />
                 <span style={{ fontSize: 13, color: '#6b7280' }}>Online</span>
