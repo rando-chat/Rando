@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '@/lib/supabase/client'
-
+import { supabase } from '../../lib/supabase/client'
 export default function DebugPage() {
   const [logs, setLogs] = useState<string[]>([])
   const [stats, setStats] = useState({ queue: 0, sessions: 0, polls: 0 })
