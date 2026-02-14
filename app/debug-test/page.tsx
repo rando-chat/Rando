@@ -93,7 +93,7 @@ export default function FullTestDebugPage() {
     }
   }
 
-  // Check for match
+  // Check for match with enhanced debugging
   const checkForMatch = async () => {
     if (!myUserId || !isInQueue) return
 
@@ -124,27 +124,106 @@ export default function FullTestDebugPage() {
         setInChat(true)
         setCurrentSession(existingSession)
         
-        // Subscribe to messages
         subscribeToMessages(existingSession.id)
-        
-        // Load existing messages
         loadMessages(existingSession.id)
         
         return
       }
 
-      // Check queue position
-      const { data: queue } = await supabase
+      // DEBUG: Get ALL queue entries with full details
+      const { data: queue, error } = await supabase
         .from('matchmaking_queue')
-        .select('display_name, user_id, entered_at')
+        .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      if (queue) {
-        const myPosition = queue.findIndex(q => q.user_id === myUserId) + 1
-        if (myPosition > 0) {
-          addLog(`📊 Position in queue: ${myPosition}/${queue.length}`, 'info')
+      if (error) {
+        addLog(`❌ Queue error: ${error.message}`, 'error')
+        return
+      }
+
+      // DEBUG: Log full queue details
+      addLog(`📊 QUEUE DEBUG - Total: ${queue?.length || 0} users`, 'info')
+      
+      if (queue && queue.length > 0) {
+        queue.forEach((entry, i) => {
+          const isMe = entry.user_id === myUserId
+          addLog(`   ${i+1}. ${entry.display_name} (${entry.user_id.slice(0,8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
+          addLog(`      Entered: ${new Date(entry.entered_at).toLocaleTimeString()}`, 'info')
+        })
+
+        // Find potential partner (not yourself)
+        const partner = queue.find(e => e.user_id !== myUserId)
+        
+        if (partner) {
+          addLog(`🎯 Found potential partner: ${partner.display_name}`, 'success')
+          
+          // Deterministic matching: smaller user_id creates session
+          const shouldCreate = myUserId < partner.user_id
+          addLog(`   Should I create? ${shouldCreate ? 'YES' : 'NO'}`, 'info')
+
+          if (shouldCreate) {
+            addLog('   🔨 Creating chat session...', 'info')
+            
+            // Mark both as matched
+            const { error: updateError } = await supabase
+              .from('matchmaking_queue')
+              .update({ matched_at: new Date().toISOString() })
+              .in('user_id', [myUserId, partner.user_id])
+
+            if (updateError) {
+              addLog(`   ❌ Failed to mark matched: ${updateError.message}`, 'error')
+              return
+            }
+
+            // Create session
+            const { data: session, error: sessionError } = await supabase
+              .from('chat_sessions')
+              .insert({
+                user1_id: myUserId,
+                user2_id: partner.user_id,
+                user1_display_name: myDisplayName,
+                user2_display_name: partner.display_name,
+                status: 'active',
+                started_at: new Date().toISOString(),
+              })
+              .select()
+              .single()
+
+            if (sessionError) {
+              addLog(`   ❌ Session creation failed: ${sessionError.message}`, 'error')
+              // Rollback
+              await supabase
+                .from('matchmaking_queue')
+                .update({ matched_at: null })
+                .in('user_id', [myUserId, partner.user_id])
+              return
+            }
+
+            addLog(`   ✅ Session created! ID: ${session.id.slice(0,8)}...`, 'success')
+            
+            // Remove from queue
+            await supabase.from('matchmaking_queue').delete().in('user_id', [myUserId, partner.user_id])
+
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current)
+              pollingRef.current = null
+            }
+            
+            setIsInQueue(false)
+            setInChat(true)
+            setCurrentSession(session)
+            
+            subscribeToMessages(session.id)
+            loadMessages(session.id)
+          } else {
+            addLog('   ⏳ Waiting for partner to create session...', 'warn')
+          }
+        } else {
+          addLog('   ⏳ No other users in queue', 'warn')
         }
+      } else {
+        addLog('   📭 Queue is empty', 'warn')
       }
 
     } catch (err: any) {
@@ -253,9 +332,17 @@ export default function FullTestDebugPage() {
 
   // Reset everything
   const reset = () => {
-    if (pollingRef.current) clearInterval(pollingRef.current)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
     if (messageSubscriptionRef.current) {
       supabase.removeChannel(messageSubscriptionRef.current)
+    }
+    
+    // Clean up queue
+    if (myUserId) {
+      supabase.from('matchmaking_queue').delete().eq('user_id', myUserId)
     }
     
     setMyUserId(null)
@@ -306,7 +393,7 @@ export default function FullTestDebugPage() {
           marginBottom: 20,
           border: '1px solid #0ff'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <div>
               <strong style={{ color: '#0ff' }}>Device ID:</strong>{' '}
               <span style={{ color: '#fff' }}>{deviceId || 'Not initialized'}</span>
@@ -360,6 +447,16 @@ export default function FullTestDebugPage() {
           <button onClick={() => setLogs([])} style={buttonStyle.secondary}>
             🧹 Clear Logs
           </button>
+
+          {/* New Force Check button */}
+          {isInQueue && (
+            <button 
+              onClick={checkForMatch}
+              style={buttonStyle.primary}
+            >
+              🔄 Force Check
+            </button>
+          )}
         </div>
 
         {/* Chat Area (shown when in chat) */}
@@ -442,7 +539,7 @@ export default function FullTestDebugPage() {
                 addLog(`📋 Queue has ${data.length} users:`, 'info')
                 data.forEach((entry, i) => {
                   const isMe = entry.user_id === myUserId
-                  addLog(`   ${i + 1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''}`, 'info')
+                  addLog(`   ${i + 1}. ${entry.display_name} (${entry.user_id.slice(0,8)}...) ${isMe ? '👤 YOU' : ''}`, 'info')
                 })
               }
             }}
@@ -464,6 +561,7 @@ export default function FullTestDebugPage() {
             <li>Open this page on <strong>TWO different devices</strong> (or two browser tabs)</li>
             <li>Click <strong style={{ color: '#0ff' }}>Initialize</strong> on both devices</li>
             <li>Click <strong style={{ color: '#0ff' }}>Join Queue</strong> on both devices</li>
+            <li>Click <strong style={{ color: '#0ff' }}>Force Check</strong> if they don't match automatically</li>
             <li>Watch the logs - they should match within 2-10 seconds</li>
             <li>Once matched, send messages between devices!</li>
             <li>Each message appears in real-time on both devices</li>
@@ -478,15 +576,18 @@ export default function FullTestDebugPage() {
           border: '1px solid #0ff'
         }}>
           <h3 style={{ color: '#0ff', marginBottom: 10 }}>📝 LIVE LOGS</h3>
-          <div style={{ 
-            height: 300, 
-            overflowY: 'auto', 
-            fontFamily: 'monospace',
-            fontSize: 12,
-            color: '#0f0'
-          }}>
+          <div 
+            id="logs"
+            style={{ 
+              height: 300, 
+              overflowY: 'auto', 
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: '#0f0'
+            }}
+          >
             {logs.map((log, i) => (
-              <div key={i} style={{ marginBottom: 2 }}>{log}</div>
+              <div key={i} style={{ marginBottom: 2, whiteSpace: 'pre-wrap' }}>{log}</div>
             ))}
           </div>
         </div>
@@ -503,7 +604,8 @@ const buttonStyle = {
     border: 'none',
     borderRadius: 5,
     cursor: 'pointer',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: '14px'
   },
   success: {
     padding: '10px 20px',
@@ -512,7 +614,8 @@ const buttonStyle = {
     border: 'none',
     borderRadius: 5,
     cursor: 'pointer',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: '14px'
   },
   warning: {
     padding: '10px 20px',
@@ -521,7 +624,8 @@ const buttonStyle = {
     border: 'none',
     borderRadius: 5,
     cursor: 'pointer',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: '14px'
   },
   danger: {
     padding: '10px 20px',
@@ -530,7 +634,8 @@ const buttonStyle = {
     border: 'none',
     borderRadius: 5,
     cursor: 'pointer',
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    fontSize: '14px'
   },
   secondary: {
     padding: '10px 20px',
@@ -538,6 +643,8 @@ const buttonStyle = {
     color: '#fff',
     border: 'none',
     borderRadius: 5,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    fontSize: '14px'
   }
 }
