@@ -3,10 +3,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { use } from 'react'
 
-export default function ChatPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: sessionId } = use(params)
+// CHANGE THIS LINE - remove Promise wrapper
+export default function ChatPage({ params }: { params: { id: string } }) {
+  const sessionId = params.id // Direct access, no use() needed
   const router = useRouter()
   
   const [session, setSession] = useState<any>(null)
