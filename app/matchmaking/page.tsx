@@ -64,7 +64,7 @@ export default function MatchmakingPage() {
     initialize()
   }, [])
 
-  // Check for match - with detailed logging
+  // Check for match - FIXED VERSION
   const checkForMatch = async () => {
     addLog('🔍 Polling... checking for match')
     
@@ -93,13 +93,25 @@ export default function MatchmakingPage() {
         return
       }
 
-      if (!isInQueue) {
-        addLog('⏸️ Not in queue - skipping')
+      // Don't rely on isInQueue state - check queue directly
+      addLog('🔍 Checking queue...')
+      
+      // Get MY queue entry to verify I'm actually in queue
+      const { data: myEntry } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .eq('user_id', session.guest_id)
+        .is('matched_at', null)
+        .maybeSingle()
+
+      if (!myEntry) {
+        addLog('⏸️ Not in queue (verified by DB)')
+        // Update UI state to match reality
+        setIsInQueue(false)
         return
       }
 
-      // Get queue
-      addLog('🔍 Fetching queue...')
+      // Get ALL queue entries
       const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
@@ -166,6 +178,7 @@ export default function MatchmakingPage() {
     }
   }
 
+  // FIXED handleStartChatting
   const handleStartChatting = async () => {
     if (!session) return
 
@@ -190,9 +203,19 @@ export default function MatchmakingPage() {
       setIsInQueue(true)
       setEstimatedWait(30)
       
-      // Start polling - 500ms
+      // Start polling
       addLog('⏱️ Starting 500ms polling...')
+      
+      // Clear any existing polling
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      
+      // Immediate first check
       setTimeout(() => checkForMatch(), 100)
+      
+      // Then interval
       pollingRef.current = setInterval(() => checkForMatch(), 500)
       
     } catch (err) {
