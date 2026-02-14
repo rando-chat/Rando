@@ -1,10 +1,3 @@
-/**
- * MessageInput Component
- * 
- * Message input with pre-send safety validation
- * Uses check_content_advanced() before sending
- */
-
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
@@ -38,7 +31,6 @@ export function MessageInput({
 
   const MAX_LENGTH = 2000
 
-  // Debounced typing stop
   const debouncedStopTyping = useRef(
     debounce(() => {
       setIsTyping(false)
@@ -46,7 +38,6 @@ export function MessageInput({
     }, 1000)
   ).current
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
@@ -63,7 +54,6 @@ export function MessageInput({
 
     setMessage(newMessage)
 
-    // Typing indicator
     if (!isTyping && newMessage.length > 0) {
       setIsTyping(true)
       onTypingStart()
@@ -76,12 +66,10 @@ export function MessageInput({
       onTypingStop()
     }
 
-    // Clear safety warning when user modifies message
     if (safetyWarning) {
       setSafetyWarning(null)
     }
 
-    // Pre-validation for potentially unsafe content (debounced)
     if (newMessage.length > 10) {
       checkSafetyDebounced(newMessage)
     }
@@ -144,7 +132,6 @@ export function MessageInput({
   return (
     <div className="border-t bg-white p-4">
       <form onSubmit={handleSubmit} className="space-y-2">
-        {/* Safety Warning */}
         {safetyWarning && (
           <div className="flex items-center gap-2 text-sm text-yellow-600 bg-yellow-50 px-3 py-2 rounded-lg">
             <AlertCircle className="w-4 h-4" />
@@ -152,7 +139,6 @@ export function MessageInput({
           </div>
         )}
 
-        {/* Status Messages */}
         {sessionStatus !== 'active' && (
           <div className="text-sm text-gray-500 text-center">
             {sessionStatus === 'ended' && 'Chat has ended'}
@@ -161,7 +147,6 @@ export function MessageInput({
           </div>
         )}
 
-        {/* Input Container */}
         <div className="flex gap-2">
           <textarea
             ref={textareaRef}
@@ -188,7 +173,6 @@ export function MessageInput({
           </button>
         </div>
 
-        {/* Character Counter */}
         <div className="flex justify-between text-xs text-gray-500">
           <span>
             {message.length > 0 && `${message.length}/${MAX_LENGTH}`}
