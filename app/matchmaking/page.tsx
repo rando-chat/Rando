@@ -15,59 +15,6 @@ export default function MatchmakingPage() {
   const [guestId, setGuestId] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(true)
 
-  // Initialize guest session on mount
-  useEffect(() => {
-    const initializeGuest = async () => {
-      try {
-        const existingUserId = getUserId()
-        
-        if (existingUserId) {
-          // Logged in user
-          setGuestId(existingUserId)
-          setDisplayName(dbUser?.display_name || 'User')
-          setIsInitializing(false)
-          return
-        }
-
-        // Try to create guest session with RPC
-        try {
-          const { data: guestSession, error: rpcError } = await supabase
-            .rpc('create_guest_session', {
-              p_ip_address: null,
-              p_user_agent: navigator.userAgent,
-              p_country_code: null
-            })
-
-          if (rpcError) throw rpcError
-
-          if (guestSession && guestSession.length > 0) {
-            const session = guestSession[0]
-            setGuestId(session.guest_id)
-            setDisplayName(session.display_name)
-            console.log('[Matchmaking] Created guest session:', session.display_name)
-          }
-        } catch (rpcError) {
-          // RPC failed, generate UUID directly (fallback)
-          console.log('[Matchmaking] RPC failed, using direct UUID generation')
-          const uuid = generateUUID()
-          setGuestId(uuid)
-          setDisplayName('Anonymous')
-        }
-
-        setIsInitializing(false)
-      } catch (err) {
-        console.error('[Matchmaking] Initialization error:', err)
-        // Last resort: use UUID
-        const uuid = generateUUID()
-        setGuestId(uuid)
-        setDisplayName('Anonymous')
-        setIsInitializing(false)
-      }
-    }
-
-    initializeGuest()
-  }, [getUserId, dbUser])
-
   // Generate UUID v4
   const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -77,10 +24,66 @@ export default function MatchmakingPage() {
     })
   }
 
-  // Handle match found
+  // Initialize guest session on mount
   useEffect(() => {
-    if (matchFound) {
-      console.log('[Matchmaking] Navigating to chat:', matchFound.session_id)
+    const initializeGuest = async () => {
+      try {
+        const existingUserId = getUserId()
+        
+        if (existingUserId) {
+          // Logged in user - extract display name safely
+          const userName = typeof dbUser?.display_name === 'string' ? dbUser.display_name : 'User'
+          setGuestId(existingUserId)
+          setDisplayName(userName)
+          setIsInitializing(false)
+          console.log('[Matchmaking] Using logged-in user:', userName)
+          return
+        }
+
+        // Guest user - create session with RPC
+        console.log('[Matchmaking] Creating guest session...')
+        const { data: guestSession, error: rpcError } = await supabase
+          .rpc('create_guest_session', {
+            p_ip_address: null,
+            p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+            p_country_code: null
+          })
+
+        if (rpcError) {
+          console.error('[Matchmaking] RPC error:', rpcError)
+          throw rpcError
+        }
+
+        if (guestSession && guestSession.length > 0) {
+          const session = guestSession[0]
+          const guestIdStr = String(session.guest_id)
+          const displayNameStr = String(session.display_name)
+          
+          setGuestId(guestIdStr)
+          setDisplayName(displayNameStr)
+          console.log('[Matchmaking] Guest session created:', displayNameStr)
+        } else {
+          throw new Error('No guest session returned')
+        }
+
+        setIsInitializing(false)
+      } catch (err: any) {
+        console.error('[Matchmaking] Init error:', err)
+        // Fallback to direct UUID
+        const uuid = generateUUID()
+        setGuestId(uuid)
+        setDisplayName('Guest_' + uuid.slice(0, 8))
+        setIsInitializing(false)
+      }
+    }
+
+    initializeGuest()
+  }, [getUserId, dbUser])
+
+  // Handle match found - navigate to chat
+  useEffect(() => {
+    if (matchFound && typeof matchFound.session_id === 'string') {
+      console.log('[Matchmaking] Match found! Navigating to:', matchFound.session_id)
       router.push(`/chat/${matchFound.session_id}`)
     }
   }, [matchFound, router])
@@ -91,11 +94,16 @@ export default function MatchmakingPage() {
       return
     }
 
+    console.log('[Matchmaking] Starting matchmaking for:', displayName)
+
+    const userTier = typeof dbUser?.tier === 'string' ? dbUser.tier : 'free'
+    const userInterests = Array.isArray(dbUser?.interests) ? dbUser.interests : []
+
     await joinQueue({
       userId: guestId,
       displayName: displayName,
-      tier: dbUser?.tier || 'free',
-      interests: dbUser?.interests || [],
+      tier: userTier,
+      interests: userInterests,
     })
   }
 
@@ -150,13 +158,13 @@ export default function MatchmakingPage() {
               Start Chatting
             </h1>
             <p style={{ fontSize: 16, color: '#6b7280', marginBottom: 10 }}>
-              You'll be matched with a random stranger
+              You will be matched with a random stranger
             </p>
             <p style={{ fontSize: 14, color: '#9ca3af', marginBottom: 30 }}>
-              Chatting as: <strong style={{ color: '#667eea' }}>{displayName}</strong>
+              Chatting as: <strong style={{ color: '#667eea' }}>{String(displayName)}</strong>
             </p>
 
-            {error && (
+            {error && typeof error === 'string' && (
               <div style={{
                 padding: 12,
                 background: '#fef2f2',
@@ -220,7 +228,7 @@ export default function MatchmakingPage() {
               fontWeight: 600,
               marginBottom: 24
             }}>
-              ~{estimatedWait}s
+              {String(estimatedWait)}s
               <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 4 }}>
                 Est. remaining
               </span>
