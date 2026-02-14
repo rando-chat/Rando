@@ -6,14 +6,14 @@ import { supabase } from '@/lib/supabase/client'
 
 export default function MatchmakingPage() {
   const router = useRouter()
-  const [session, setSession] = useState<any>(null) // Store ENTIRE session object like debug
+  const [session, setSession] = useState<any>(null)
   const [isInQueue, setIsInQueue] = useState(false)
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [isLoading, setIsLoading] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Generate UUID
+  // Generate UUID fallback
   const generateUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0
@@ -22,7 +22,7 @@ export default function MatchmakingPage() {
     })
   }
 
-  // Initialize - EXACTLY like debug page
+  // Initialize guest session
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -36,7 +36,7 @@ export default function MatchmakingPage() {
 
         if (data && data.length > 0) {
           const guestSession = data[0]
-          setSession(guestSession) // Store entire object
+          setSession(guestSession)
         } else {
           throw new Error('No guest session')
         }
@@ -44,6 +44,7 @@ export default function MatchmakingPage() {
         setIsInitializing(false)
       } catch (err) {
         console.error('Init error:', err)
+        // Fallback to local UUID
         const uuid = generateUUID()
         setSession({
           guest_id: uuid,
@@ -56,12 +57,12 @@ export default function MatchmakingPage() {
     initialize()
   }, [])
 
-  // Check for match - EXACTLY like debug page
+  // Check for match - FIXED VERSION
   const checkForMatch = async () => {
     if (!session) return
 
     try {
-      // Check for existing session FIRST
+      // Check for existing session FIRST (critical for the waiting user)
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -70,6 +71,7 @@ export default function MatchmakingPage() {
         .maybeSingle()
 
       if (existingSession) {
+        console.log('Match found! Redirecting to chat...')
         if (pollingRef.current) {
           clearInterval(pollingRef.current)
           pollingRef.current = null
@@ -92,13 +94,18 @@ export default function MatchmakingPage() {
       const partner = queue.find(u => u.user_id !== session.guest_id)
       if (!partner) return
 
-      // Create session if I should
+      // 🔥 CRITICAL FIX: One creates, the other waits
       if (session.guest_id < partner.user_id) {
+        // I CREATE the session
+        console.log('Creating session...')
+        
+        // Mark both as matched
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
           .in('user_id', [session.guest_id, partner.user_id])
 
+        // Create chat session
         const { data: newSession } = await supabase
           .from('chat_sessions')
           .insert({
@@ -113,6 +120,7 @@ export default function MatchmakingPage() {
           .single()
 
         if (newSession) {
+          // Clean up queue
           await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
           
           if (pollingRef.current) {
@@ -122,9 +130,12 @@ export default function MatchmakingPage() {
           
           router.push(`/chat/${newSession.id}`)
         }
+      } else {
+        // I WAIT for partner to create
+        console.log('Waiting for partner to create session...')
+        // Just continue polling - the existing session check at the top will catch it
+        setEstimatedWait(prev => Math.max(5, prev - 1))
       }
-
-      setEstimatedWait(prev => Math.max(5, prev - 1))
     } catch (err) {
       console.error('Match check error:', err)
     }
@@ -135,8 +146,10 @@ export default function MatchmakingPage() {
 
     setIsLoading(true)
     try {
+      // Clean up any old queue entries
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
+      // Join queue
       await supabase.from('matchmaking_queue').insert({
         user_id: session.guest_id,
         display_name: session.display_name,
@@ -147,8 +160,9 @@ export default function MatchmakingPage() {
       })
 
       setIsInQueue(true)
+      setEstimatedWait(30)
       
-      // Start polling - EXACTLY like debug (500ms)
+      // Start polling - 500ms like debug page
       setTimeout(checkForMatch, 100)
       pollingRef.current = setInterval(checkForMatch, 500)
       
@@ -171,6 +185,7 @@ export default function MatchmakingPage() {
     setEstimatedWait(30)
   }
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) {
