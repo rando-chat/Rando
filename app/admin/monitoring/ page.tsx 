@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { DashboardLayout } from '@/components/admin/DashboardLayout'
 import { supabase } from '@/lib/supabase/client'
 
+export const dynamic = 'force-static'
+
 export default function MonitoringPage() {
   const [health, setHealth] = useState<any>(null)
   const [logs, setLogs] = useState<any[]>([])
