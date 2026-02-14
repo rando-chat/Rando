@@ -18,23 +18,8 @@ export function MatchmakingQueue() {
   }, [])
 
   const handleStart = async () => {
-    let userId = getUserId()
-    let displayName = getDisplayName()
-
-    // If not logged in, create a guest session automatically
-    if (!userId) {
-      const guestId = `guest_${Math.random().toString(36).slice(2, 10)}`
-      userId = guestId
-      displayName = `Guest_${guestId.slice(6, 10)}`
-    }
-
-    await joinQueue({
-      userId,
-      isGuest: isGuest || !user,
-      displayName,
-      tier: getUserTier() || 'free',
-      interests: [],
-    })
+    // The new useMatchmaking hook handles session creation internally
+    await joinQueue()
   }
 
   if (matchFound) {
