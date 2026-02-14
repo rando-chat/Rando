@@ -7,9 +7,9 @@ export function TypingIndicator({ displayName }: { displayName: string }) {
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">{displayName} is typing</span>
           <div className="flex gap-1">
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-150"></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce animation-delay-300"></div>
+            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
           </div>
         </div>
       </div>
