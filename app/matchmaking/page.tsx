@@ -28,7 +28,7 @@ export default function MatchmakingPage() {
     })
   }
 
-  // Initialize guest session and START POLLING IMMEDIATELY
+  // Initialize guest session
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -51,8 +51,8 @@ export default function MatchmakingPage() {
 
         setIsInitializing(false)
         
-        // START POLLING IMMEDIATELY
-        addLog('⏱️ Starting background polling (checking for existing matches)...')
+        // Start polling immediately
+        addLog('⏱️ Starting background polling...')
         startPolling()
         
       } catch (err) {
@@ -83,7 +83,7 @@ export default function MatchmakingPage() {
     pollingRef.current = setInterval(() => checkForMatch(), 500)
   }
 
-  // Check for match - FIXED VERSION
+  // Check for match - EXACT LOGIC FROM DEBUG PAGE
   const checkForMatch = async () => {
     addLog('🔍 Polling... checking for match')
     
@@ -94,7 +94,6 @@ export default function MatchmakingPage() {
 
     try {
       // Check for existing session FIRST
-      addLog('🔍 Checking for existing chat...')
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -112,23 +111,8 @@ export default function MatchmakingPage() {
         return
       }
 
-      // Always check queue status from DB
-      const { data: myQueueEntry } = await supabase
-        .from('matchmaking_queue')
-        .select('*')
-        .eq('user_id', session.guest_id)
-        .is('matched_at', null)
-        .maybeSingle()
-
-      const amIInQueue = !!myQueueEntry
-
-      // Update UI state to match DB
-      if (amIInQueue !== isInQueue) {
-        setIsInQueue(amIInQueue)
-      }
-
-      if (!amIInQueue) {
-        addLog('⏸️ Not in queue (verified)')
+      if (!isInQueue) {
+        addLog('⏸️ Not in queue - waiting')
         return
       }
 
@@ -144,8 +128,12 @@ export default function MatchmakingPage() {
         return
       }
 
-      addLog(`📊 Queue has ${queue.length} users`)
-      
+      addLog(`📊 QUEUE (${queue.length} users):`)
+      queue.forEach((entry, i) => {
+        const isMe = entry.user_id === session.guest_id
+        addLog(`   ${i+1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''}`)
+      })
+
       const partner = queue.find(u => u.user_id !== session.guest_id)
       if (!partner) {
         addLog('⏳ No partner found')
@@ -154,18 +142,18 @@ export default function MatchmakingPage() {
 
       addLog(`🎯 Found partner: ${partner.display_name}`)
 
-      // One creates, the other waits
-      if (session.guest_id < partner.user_id) {
-        addLog('🎲 I CREATE session')
+      // EXACT SAME LOGIC AS DEBUG PAGE
+      const shouldCreate = session.guest_id < partner.user_id
+      addLog(`🎲 ${shouldCreate ? 'I CREATE session' : 'WAITING for partner to create'}`)
+
+      if (shouldCreate) {
+        addLog('🔨 Creating chat session...')
         
-        // Mark both as matched
         await supabase
           .from('matchmaking_queue')
           .update({ matched_at: new Date().toISOString() })
           .in('user_id', [session.guest_id, partner.user_id])
 
-        // Create chat session
-        addLog('🔨 Creating chat session...')
         const { data: newSession } = await supabase
           .from('chat_sessions')
           .insert({
@@ -195,11 +183,11 @@ export default function MatchmakingPage() {
         setEstimatedWait(prev => Math.max(5, prev - 1))
       }
     } catch (err) {
-      addLog(`❌ Error: ${err}`)
+      addLog(`❌ Check error: ${err}`)
     }
   }
 
-  // FIXED handleStartChatting with delay after queue insert
+  // SIMPLIFIED handleStartChatting
   const handleStartChatting = async () => {
     if (!session) return
 
@@ -211,7 +199,7 @@ export default function MatchmakingPage() {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
       // Join queue
-      const { error } = await supabase.from('matchmaking_queue').insert({
+      await supabase.from('matchmaking_queue').insert({
         user_id: session.guest_id,
         display_name: session.display_name,
         is_guest: true,
@@ -220,19 +208,13 @@ export default function MatchmakingPage() {
         entered_at: new Date().toISOString()
       })
 
-      if (error) throw error
-
       addLog('✅ Joined queue')
       setIsInQueue(true)
       setEstimatedWait(30)
       
-      // CRITICAL: Wait for database to commit
-      addLog('⏱️ Waiting for queue to stabilize...')
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      // Force an immediate check
+      // FORCE CHECK IMMEDIATELY
       addLog('🔍 FORCE CHECKING NOW...')
-      await checkForMatch()
+      setTimeout(() => checkForMatch(), 500)
       
     } catch (err) {
       addLog(`❌ Join error: ${err}`)
@@ -254,7 +236,7 @@ export default function MatchmakingPage() {
     setEstimatedWait(30)
     addLog('✅ Cancelled')
     
-    // Restart polling for next attempt
+    // Restart polling
     startPolling()
   }
 
