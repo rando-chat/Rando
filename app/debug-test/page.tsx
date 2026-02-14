@@ -92,9 +92,14 @@ export default function SimpleDebugPage() {
   }
 
   const checkForMatch = async () => {
-    if (!session) return
+    if (!session) {
+      addLog('❌ No session - polling stopped')
+      return
+    }
 
     try {
+      addLog('🔍 Polling... checking for match')
+      
       // 🔥 CRITICAL: ALWAYS check for existing sessions FIRST
       const { data: existingSession } = await supabase
         .from('chat_sessions')
@@ -123,7 +128,10 @@ export default function SimpleDebugPage() {
       }
 
       // Only check queue if we're supposed to be in it
-      if (!inQueue) return
+      if (!inQueue) {
+        addLog('⏸️ Not in queue - skipping check')
+        return
+      }
 
       // Get ALL queue entries
       const { data: queue, error } = await supabase
@@ -233,6 +241,8 @@ export default function SimpleDebugPage() {
   }
 
   const subscribeToMessages = (sessionId: string) => {
+    addLog(`📡 Subscribing to messages for session: ${sessionId.slice(0, 8)}...`)
+    
     supabase
       .channel(`chat-${sessionId}`)
       .on('postgres_changes', {
@@ -241,11 +251,20 @@ export default function SimpleDebugPage() {
         table: 'messages',
         filter: `session_id=eq.${sessionId}`
       }, (payload) => {
+        addLog(`📨 New message received via realtime!`)
         const msg = payload.new
         setMessages(prev => [...prev, msg])
         addLog(`💬 ${msg.sender_display_name}: ${msg.content}`)
+        
+        // Auto-scroll to bottom
+        setTimeout(() => {
+          const chatDiv = document.getElementById('chat-messages')
+          if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
+        }, 100)
       })
-      .subscribe()
+      .subscribe((status) => {
+        addLog(`📡 Subscription status: ${status}`)
+      })
   }
 
   const sendMessage = async () => {
@@ -358,7 +377,7 @@ export default function SimpleDebugPage() {
       {inChat && currentSession && (
         <div style={{ background: '#16213e', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '2px solid #0f0' }}>
           <h3 style={{ color: '#0f0', marginBottom: '10px' }}>💬 CHAT ACTIVE - {currentSession.user1_id === session.guest_id ? currentSession.user2_display_name : currentSession.user1_display_name}</h3>
-          <div style={{ height: '200px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
+          <div id="chat-messages" style={{ height: '200px', overflowY: 'auto', background: '#1a1a2e', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
             {messages.length === 0 ? (
               <div style={{ color: '#666', textAlign: 'center', paddingTop: '80px' }}>No messages yet. Say hi!</div>
             ) : (
