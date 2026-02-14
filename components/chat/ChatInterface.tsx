@@ -1,10 +1,3 @@
-/**
- * ChatInterface Component
- * 
- * Main chat interface with real-time messaging
- * Integrates with Supabase Realtime for live updates
- */
-
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
@@ -26,7 +19,7 @@ interface ChatInterfaceProps {
 export function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const { getUserId, isGuest } = useAuth()
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  
+
   const {
     session,
     messages,
@@ -45,14 +38,13 @@ export function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const [unsafeMessage, setUnsafeMessage] = useState<string | null>(null)
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
   const handleSendMessage = async (content: string) => {
     const result = await sendMessage(content)
-    
+
     if (result && !result.is_safe) {
       setUnsafeMessage(result.flagged_reason || 'Message flagged for review')
       setTimeout(() => setUnsafeMessage(null), 5000)
@@ -97,19 +89,16 @@ export function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Chat Header */}
       <ChatHeader
         session={session}
         partnerName={partnerName}
         onEndChat={endChat}
       />
 
-      {/* Safety Warning */}
       {unsafeMessage && (
         <SafetyWarning message={unsafeMessage} />
       )}
 
-      {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
         {messages.length === 0 && (
           <div className="text-center text-gray-500 mt-8">
@@ -125,7 +114,6 @@ export function ChatInterface({ sessionId }: ChatInterfaceProps) {
           />
         ))}
 
-        {/* Typing Indicator */}
         {partnerTyping && (
           <TypingIndicator displayName={partnerName} />
         )}
@@ -133,7 +121,6 @@ export function ChatInterface({ sessionId }: ChatInterfaceProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
       <MessageInput
         onSend={handleSendMessage}
         onTypingStart={handleTypingStart}
