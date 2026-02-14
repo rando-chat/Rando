@@ -14,8 +14,13 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const [messageInput, setMessageInput] = useState('')
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [isTyping, setIsTyping] = useState(false)
+  const [partnerTyping, setPartnerTyping] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const channelRef = useRef<any>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const initialize = async () => {
@@ -34,6 +39,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
         loadMessages()
         subscribeToMessages()
+        setupTypingPresence()
         setLoading(false)
       } catch (err) {
         console.error('Init error:', err)
@@ -58,6 +64,39 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
     if (data) setMessages(data)
+    scrollToBottom()
+  }
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+  }
+
+  const setupTypingPresence = () => {
+    const channel = supabase.channel(`presence-${sessionId}`)
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        const typingUsers = Object.values(state).flat().filter((p: any) => p.typing)
+        setPartnerTyping(typingUsers.length > 0 && typingUsers[0]?.user_id !== guestSession?.guest_id)
+      })
+      .subscribe()
+  }
+
+  const handleTyping = () => {
+    if (!guestSession) return
+
+    if (!isTyping) {
+      setIsTyping(true)
+      channelRef.current?.track({ user_id: guestSession.guest_id, typing: true })
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false)
+      channelRef.current?.track({ user_id: guestSession.guest_id, typing: false })
+    }, 1000)
   }
 
   const subscribeToMessages = () => {
@@ -76,10 +115,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           if (prev.some(m => m.id === msg.id)) return prev
           return [...prev, msg]
         })
-        setTimeout(() => {
-          const chatDiv = document.getElementById('chat-messages')
-          if (chatDiv) chatDiv.scrollTop = chatDiv.scrollHeight
-        }, 100)
+        scrollToBottom()
       })
       .subscribe()
 
@@ -98,6 +134,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       created_at: new Date().toISOString()
     })
     setMessageInput('')
+    setIsTyping(false)
+    channelRef.current?.track({ user_id: guestSession.guest_id, typing: false })
   }
 
   const uploadImage = async (file: File) => {
@@ -136,11 +174,11 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const endChat = async () => {
-    if (!session) return
-    await supabase.from('chat_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', sessionId)
-    router.push('/matchmaking')
+  const formatTime = (timestamp: string) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
+
+  const emojis = ['😊', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💯']
 
   if (loading) {
     return (
@@ -169,15 +207,28 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f9fafb' }}>
-      <div style={{ padding: '16px 20px', background: 'white', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>💬 {partnerName || 'Anonymous'}</h1>
-          <p style={{ fontSize: 14, color: '#6b7280', margin: 0 }}>You: {guestSession.display_name}</p>
+      {/* Header with online status */}
+      <div style={{ padding: '16px 20px', background: 'white', borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div>
+              <h1 style={{ fontSize: 20, fontWeight: 600, color: '#1f2937', margin: 0 }}>💬 {partnerName || 'Anonymous'}</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, background: '#10b981', borderRadius: '50%' }} />
+                <span style={{ fontSize: 13, color: '#6b7280' }}>Online</span>
+                <span style={{ fontSize: 13, color: '#9ca3af' }}>•</span>
+                <span style={{ fontSize: 13, color: '#6b7280' }}>You: {guestSession.display_name}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => router.push('/matchmaking')} style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>End Chat</button>
+          </div>
         </div>
-        <button onClick={endChat} style={{ padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 }}>End Chat</button>
       </div>
 
-      <div id="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {messages.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#9ca3af', padding: '60px 20px' }}>
             <p style={{ fontSize: 16 }}>No messages yet</p>
@@ -188,28 +239,184 @@ export default function ChatPage({ params }: { params: { id: string } }) {
             const isMe = msg.sender_id === guestSession.guest_id
             const isImage = msg.content.startsWith('📷 Image:')
             const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
+            const showTimestamp = i === 0 || formatTime(msg.created_at) !== formatTime(messages[i-1]?.created_at)
 
             return (
-              <div key={msg.id || i} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '70%', padding: 12, borderRadius: 12, background: isMe ? '#667eea' : 'white', color: isMe ? 'white' : '#1f2937', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, opacity: 0.8 }}>{msg.sender_display_name}</div>
-                  {isImage ? <img src={imageUrl} alt="Shared" style={{ maxWidth: '100%', borderRadius: 8, marginTop: 4 }} /> : <div style={{ fontSize: 15 }}>{msg.content}</div>}
+              <div key={msg.id || i}>
+                {showTimestamp && (
+                  <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af', background: '#f3f4f6', padding: '4px 12px', borderRadius: 12 }}>{formatTime(msg.created_at)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ maxWidth: '70%' }}>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, textAlign: isMe ? 'right' : 'left' }}>
+                      {msg.sender_display_name}
+                    </div>
+                    <div style={{ 
+                      padding: 12, 
+                      borderRadius: 16, 
+                      background: isMe ? '#667eea' : 'white', 
+                      color: isMe ? 'white' : '#1f2937', 
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      borderBottomRightRadius: isMe ? 4 : 16,
+                      borderBottomLeftRadius: isMe ? 16 : 4,
+                    }}>
+                      {isImage ? (
+                        <img src={imageUrl} alt="Shared" style={{ maxWidth: '100%', borderRadius: 8, maxHeight: 200 }} />
+                      ) : (
+                        <div style={{ fontSize: 15, lineHeight: '1.4' }}>{msg.content}</div>
+                      )}
+                    </div>
+                    {isMe && (
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>
+                        {msg.read_by_recipient ? '✓✓' : '✓'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )
           })
         )}
+        
+        {/* Typing indicator */}
+        {partnerTyping && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div style={{ background: 'white', padding: '12px 16px', borderRadius: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <span style={{ animation: 'typing 1s infinite' }}>•</span>
+                <span style={{ animation: 'typing 1s infinite 0.2s' }}>•</span>
+                <span style={{ animation: 'typing 1s infinite 0.4s' }}>•</span>
+              </div>
+              <style>{`
+                @keyframes typing { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+              `}</style>
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
+      {/* Input bar */}
       <div style={{ padding: 16, background: 'white', borderTop: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-          <input value={messageInput} onChange={(e) => setMessageInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} placeholder="Type a message..." style={{ flex: 1, padding: '12px 16px', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 15, outline: 'none' }} />
-          <button onClick={sendMessage} style={{ padding: '12px 24px', background: '#667eea', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Send</button>
+        {/* Emoji picker */}
+        {showEmojiPicker && (
+          <div style={{ 
+            position: 'absolute', 
+            bottom: '100%', 
+            left: 16, 
+            background: 'white', 
+            borderRadius: 12, 
+            padding: 12, 
+            boxShadow: '0 -4px 12px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb',
+            marginBottom: 8,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 8
+          }}>
+            {emojis.map(emoji => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  setMessageInput(prev => prev + emoji)
+                  setShowEmojiPicker(false)
+                }}
+                style={{ 
+                  width: 40, 
+                  height: 40, 
+                  fontSize: 20, 
+                  border: 'none', 
+                  background: '#f3f4f6', 
+                  borderRadius: 8, 
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            style={{ 
+              padding: 12, 
+              background: '#f3f4f6', 
+              border: 'none', 
+              borderRadius: 8, 
+              cursor: 'pointer',
+              fontSize: 20,
+              transition: 'all 0.2s'
+            }}
+          >
+            😊
+          </button>
+          
+          <input
+            value={messageInput}
+            onChange={(e) => {
+              setMessageInput(e.target.value)
+              handleTyping()
+            }}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type a message..."
+            style={{ 
+              flex: 1,
+              padding: '12px 16px',
+              border: '1px solid #e5e7eb',
+              borderRadius: 24,
+              fontSize: 15,
+              outline: 'none',
+              transition: 'all 0.2s'
+            }}
+          />
+          
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept="image/*"
+            style={{ display: 'none' }}
+          />
+          
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{ 
+              padding: 12, 
+              background: uploading ? '#9ca3af' : '#f3f4f6', 
+              border: 'none', 
+              borderRadius: 8, 
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              fontSize: 20,
+              transition: 'all 0.2s'
+            }}
+          >
+            📷
+          </button>
+          
+          <button
+            onClick={sendMessage}
+            disabled={!messageInput.trim()}
+            style={{ 
+              padding: '12px 24px',
+              background: messageInput.trim() ? '#667eea' : '#e5e7eb',
+              color: messageInput.trim() ? 'white' : '#9ca3af',
+              border: 'none',
+              borderRadius: 24,
+              cursor: messageInput.trim() ? 'pointer' : 'not-allowed',
+              fontWeight: 600,
+              transition: 'all 0.2s',
+              boxShadow: messageInput.trim() ? '0 4px 12px rgba(102,126,234,0.4)' : 'none'
+            }}
+          >
+            Send
+          </button>
         </div>
-        <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*" style={{ display: 'none' }} />
-        <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{ width: '100%', padding: '10px', background: uploading ? '#9ca3af' : '#8b5cf6', color: 'white', border: 'none', borderRadius: 8, cursor: uploading ? 'not-allowed' : 'pointer', fontSize: 14 }}>
-          {uploading ? '📤 Uploading...' : '📷 Share Image'}
-        </button>
       </div>
     </div>
   )
