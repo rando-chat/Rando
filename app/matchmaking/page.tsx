@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 export default function MatchmakingPage() {
   const router = useRouter()
   const [session, setSession] = useState<any>(null)
-  const [isInQueue, setIsInQueue] = useState(false)
+  const [isWaiting, setIsWaiting] = useState(false) // Changed from isInQueue
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [isLoading, setIsLoading] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
@@ -83,7 +83,7 @@ export default function MatchmakingPage() {
     pollingRef.current = setInterval(() => checkForMatch(), 500)
   }
 
-  // Check for match - EXACT LOGIC FROM DEBUG PAGE
+  // Check for match - NOW USING DIRECT QUEUE CHECK
   const checkForMatch = async () => {
     addLog('🔍 Polling... checking for match')
     
@@ -111,8 +111,23 @@ export default function MatchmakingPage() {
         return
       }
 
-      if (!isInQueue) {
-        addLog('⏸️ Not in queue - waiting')
+      // Check if I'm in queue
+      const { data: myQueueEntry } = await supabase
+        .from('matchmaking_queue')
+        .select('*')
+        .eq('user_id', session.guest_id)
+        .is('matched_at', null)
+        .maybeSingle()
+
+      const amIInQueue = !!myQueueEntry
+
+      // Update UI state based on queue status
+      if (amIInQueue !== isWaiting) {
+        setIsWaiting(amIInQueue)
+      }
+
+      if (!amIInQueue) {
+        addLog('⏸️ Not in queue')
         return
       }
 
@@ -134,6 +149,14 @@ export default function MatchmakingPage() {
         addLog(`   ${i+1}. ${entry.display_name} ${isMe ? '👤 YOU' : ''}`)
       })
 
+      // If only me in queue, wait
+      if (queue.length === 1) {
+        addLog('⏳ Alone in queue - waiting...')
+        setEstimatedWait(prev => Math.max(5, prev - 1))
+        return
+      }
+
+      // Find partner (first person not me)
       const partner = queue.find(u => u.user_id !== session.guest_id)
       if (!partner) {
         addLog('⏳ No partner found')
@@ -209,7 +232,7 @@ export default function MatchmakingPage() {
       })
 
       addLog('✅ Joined queue')
-      setIsInQueue(true)
+      setIsWaiting(true)
       setEstimatedWait(30)
       
       // FORCE CHECK IMMEDIATELY
@@ -232,7 +255,7 @@ export default function MatchmakingPage() {
     if (session) {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
     }
-    setIsInQueue(false)
+    setIsWaiting(false)
     setEstimatedWait(30)
     addLog('✅ Cancelled')
     
@@ -292,7 +315,7 @@ export default function MatchmakingPage() {
         padding: 40,
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }}>
-        {!isInQueue ? (
+        {!isWaiting ? (
           <>
             <div style={{ fontSize: 48, marginBottom: 20, textAlign: 'center' }}>💬</div>
             <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 10, color: '#1f2937', textAlign: 'center' }}>
