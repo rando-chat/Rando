@@ -29,7 +29,7 @@ export function ChatHeader({ session, partnerName, onEndChat }: ChatHeaderProps)
           )}
         </div>
       </div>
-      
+
       <button
         onClick={() => setShowActions(!showActions)}
         className="p-2 hover:bg-gray-100 rounded-lg"
