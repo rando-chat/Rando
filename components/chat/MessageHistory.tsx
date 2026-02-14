@@ -35,7 +35,7 @@ export function MessageHistory({ messages, currentUserId, onLoadMore, hasMore }:
         </div>
       )}
       {messages.map(msg => (
-        <MessageBubble key={msg.id} message={msg} isCurrentUser={msg.sender_id === currentUserId} />
+        <MessageBubble key={msg.id} message={msg} isOwn={msg.sender_id === currentUserId} />
       ))}
     </div>
   )
