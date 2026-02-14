@@ -38,7 +38,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         const { data } = await supabase.rpc('create_guest_session')
         if (data && data.length > 0) {
           setGuestSession(data[0])
-          // Setup presence after guest session is ready
           setupTypingPresence(data[0])
         }
 
@@ -78,7 +77,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     }, 100)
   }
 
-  // FIXED: Presence channel typing
   const setupTypingPresence = (guest: any) => {
     if (!guest) return
 
@@ -93,7 +91,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     presenceChannel
       .on('presence', { event: 'sync' }, () => {
         const state = presenceChannel.presenceState()
-        // The presence state returns objects with the key as user_id
         const typingUsers = Object.keys(state).filter(key => {
           const userPresence = state[key] as any[]
           return userPresence[0]?.typing && key !== guest.guest_id
@@ -311,7 +308,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           })
         )}
         
-        {/* Typing indicator - FIXED: Now using partnerTyping state */}
+        {/* Typing indicator */}
         {partnerTyping && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{ background: 'white', padding: '12px 16px', borderRadius: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
@@ -365,8 +362,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   background: '#f3f4f6', 
                   borderRadius: 8, 
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  ':hover': { background: '#e5e7eb' }
+                  transition: 'all 0.2s'
                 }}
               >
                 {emoji}
