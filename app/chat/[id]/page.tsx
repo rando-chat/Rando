@@ -20,6 +20,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const channelRef = useRef<any>(null)
+  const presenceRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,11 +36,14 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         setSession(chatSession)
 
         const { data } = await supabase.rpc('create_guest_session')
-        if (data && data.length > 0) setGuestSession(data[0])
+        if (data && data.length > 0) {
+          setGuestSession(data[0])
+          // Setup presence after guest session is ready
+          setupTypingPresence(data[0])
+        }
 
         loadMessages()
         subscribeToMessages()
-        setupTypingPresence()
         setLoading(false)
       } catch (err) {
         console.error('Init error:', err)
@@ -51,6 +55,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current)
+      if (presenceRef.current) supabase.removeChannel(presenceRef.current)
       if (session?.id && session?.status === 'active') {
         supabase.from('chat_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', session.id)
       }
@@ -73,29 +78,53 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     }, 100)
   }
 
-  const setupTypingPresence = () => {
-    const channel = supabase.channel(`presence-${sessionId}`)
-    channel
+  // FIXED: Presence channel typing
+  const setupTypingPresence = (guest: any) => {
+    if (!guest) return
+
+    const presenceChannel = supabase.channel(`presence-${sessionId}`, {
+      config: {
+        presence: {
+          key: guest.guest_id
+        }
+      }
+    })
+    
+    presenceChannel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const typingUsers = Object.values(state).flat().filter((p: any) => p.typing)
-        setPartnerTyping(typingUsers.length > 0 && typingUsers[0]?.user_id !== guestSession?.guest_id)
+        const state = presenceChannel.presenceState()
+        // The presence state returns objects with the key as user_id
+        const typingUsers = Object.keys(state).filter(key => {
+          const userPresence = state[key] as any[]
+          return userPresence[0]?.typing && key !== guest.guest_id
+        })
+        
+        setPartnerTyping(typingUsers.length > 0)
       })
       .subscribe()
+
+    presenceRef.current = presenceChannel
   }
 
   const handleTyping = () => {
-    if (!guestSession) return
+    if (!guestSession || !presenceRef.current) return
 
     if (!isTyping) {
       setIsTyping(true)
-      channelRef.current?.track({ user_id: guestSession.guest_id, typing: true })
+      presenceRef.current.track({ 
+        typing: true,
+        user_id: guestSession.guest_id,
+        name: guestSession.display_name
+      })
     }
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false)
-      channelRef.current?.track({ user_id: guestSession.guest_id, typing: false })
+      presenceRef.current?.track({ 
+        typing: false,
+        user_id: guestSession.guest_id
+      })
     }, 1000)
   }
 
@@ -135,7 +164,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     })
     setMessageInput('')
     setIsTyping(false)
-    channelRef.current?.track({ user_id: guestSession.guest_id, typing: false })
+    if (presenceRef.current) {
+      presenceRef.current.track({ typing: false })
+    }
   }
 
   const uploadImage = async (file: File) => {
@@ -270,7 +301,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                     </div>
                     {isMe && (
                       <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>
-                        {msg.read_by_recipient ? '✓✓' : '✓'}
+                        ✓
                       </div>
                     )}
                   </div>
@@ -280,7 +311,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           })
         )}
         
-        {/* Typing indicator */}
+        {/* Typing indicator - FIXED: Now using partnerTyping state */}
         {partnerTyping && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{ background: 'white', padding: '12px 16px', borderRadius: 16, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
@@ -290,7 +321,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 <span style={{ animation: 'typing 1s infinite 0.4s' }}>•</span>
               </div>
               <style>{`
-                @keyframes typing { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+                @keyframes typing { 
+                  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 
+                  30% { opacity: 1; transform: translateY(-4px); } 
+                }
               `}</style>
             </div>
           </div>
@@ -299,7 +333,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* Input bar */}
-      <div style={{ padding: 16, background: 'white', borderTop: '1px solid #e5e7eb' }}>
+      <div style={{ padding: 16, background: 'white', borderTop: '1px solid #e5e7eb', position: 'relative' }}>
         {/* Emoji picker */}
         {showEmojiPicker && (
           <div style={{ 
@@ -331,7 +365,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   background: '#f3f4f6', 
                   borderRadius: 8, 
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  ':hover': { background: '#e5e7eb' }
                 }}
               >
                 {emoji}
