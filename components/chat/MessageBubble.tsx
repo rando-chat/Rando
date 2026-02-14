@@ -1,66 +1,46 @@
 'use client'
 
-import { formatRelativeTime } from '@/lib/utils'
-import { Shield, AlertTriangle } from 'lucide-react'
-import type { Message } from '@/lib/supabase/client'
-
 interface MessageBubbleProps {
-  message: Message
-  isCurrentUser: boolean
+  message: any
+  isOwn: boolean
 }
 
-export function MessageBubble({ message, isCurrentUser }: MessageBubbleProps) {
-  const isFlagged = !message.is_safe || message.flagged_reason !== null
-  const moderationScore = message.moderation_score ?? 1.0
+export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
+  const isImage = message.content?.startsWith('📷 Image:')
+  const imageUrl = isImage ? message.content.replace('📷 Image: ', '') : null
 
   return (
-    <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[70%] ${isCurrentUser ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[70%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col`}>
+        <span className="text-xs text-gray-500 mb-1 px-1">
+          {message.sender_display_name || 'Anonymous'}
+        </span>
+        
         <div
-          className={`rounded-2xl px-4 py-3 ${
-            isCurrentUser
-              ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
-              : 'bg-gray-100 text-gray-800'
-          } ${isFlagged ? 'border-2 border-yellow-400' : ''}`}
+          className={`rounded-2xl px-4 py-2 ${
+            isOwn
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-sm'
+              : 'bg-white text-gray-900 rounded-bl-sm shadow-sm'
+          }`}
         >
-          <div className="flex items-center justify-between mb-1">
-            <span className={`text-sm font-medium ${isCurrentUser ? 'text-purple-100' : 'text-gray-600'}`}>
-              {message.sender_display_name}
-            </span>
-            <span className={`text-xs ${isCurrentUser ? 'text-purple-200' : 'text-gray-500'}`}>
-              {formatRelativeTime(message.created_at)}
-            </span>
-          </div>
-
-          <p className="break-words whitespace-pre-wrap">{message.content}</p>
-
-          {isFlagged && (
-            <div className={`mt-2 flex items-center gap-2 text-xs ${isCurrentUser ? 'text-purple-200' : 'text-yellow-600'}`}>
-              <AlertTriangle className="w-3 h-3" />
-              <span>Message flagged for review</span>
-            </div>
-          )}
-
-          {message.edited && (
-            <div className={`mt-1 text-xs ${isCurrentUser ? 'text-purple-200' : 'text-gray-500'}`}>
-              (edited)
-            </div>
+          {isImage ? (
+            <img
+              src={imageUrl}
+              alt="Shared image"
+              className="max-w-full rounded-lg max-h-64 object-cover"
+            />
+          ) : (
+            <p className="text-sm break-words">{message.content}</p>
           )}
         </div>
-
-        {process.env.NODE_ENV === 'development' && moderationScore < 1.0 && (
-          <div className="text-xs text-gray-500 flex items-center gap-1">
-            <Shield className="w-3 h-3" />
-            Safety: {(moderationScore * 100).toFixed(0)}%
-          </div>
-        )}
-
-        {isCurrentUser && (
-          <div className="text-xs text-gray-500">
-            {message.delivered ? (
-              message.read_by_recipient ? 'Read' : 'Delivered'
-            ) : 'Sending...'}
-          </div>
+        
+        {message.created_at && (
+          <span className="text-xs text-gray-400 mt-1 px-1">
+            {new Date(message.created_at).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
         )}
       </div>
     </div>
