@@ -10,6 +10,7 @@ export function useMatchmaking() {
   const [matchFound, setMatchFound] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [myDisplayName, setMyDisplayName] = useState<string>('')
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const mountedRef = useRef(true)
   const myUserIdRef = useRef<string | null>(null)
@@ -30,6 +31,27 @@ export function useMatchmaking() {
     })
   }
 
+  const getFunName = async (): Promise<string> => {
+    try {
+      // Create a guest session to get a fun name
+      const { data: guestSession, error } = await supabase
+        .rpc('create_guest_session', {
+          p_ip_address: null,
+          p_user_agent: navigator.userAgent,
+          p_country_code: null
+        });
+
+      if (!error && guestSession && guestSession.length > 0) {
+        return guestSession[0].display_name;
+      }
+    } catch (err) {
+      console.error('Error getting fun name:', err);
+    }
+    
+    // Fallback
+    return 'Guest' + Math.floor(Math.random() * 10000);
+  }
+
   const checkForMatch = useCallback(async () => {
     const userId = myUserIdRef.current
     if (!userId || !mountedRef.current) return
@@ -48,7 +70,9 @@ export function useMatchmaking() {
         if (pollingRef.current) clearInterval(pollingRef.current)
         setMatchFound({
           session_id: existingSession.id,
-          match_display_name: 'Anonymous',
+          match_display_name: existingSession.user1_id === userId 
+            ? existingSession.user2_display_name 
+            : existingSession.user1_display_name,
           match_user_id: existingSession.user1_id === userId 
             ? existingSession.user2_id 
             : existingSession.user1_id,
@@ -96,8 +120,8 @@ export function useMatchmaking() {
           .insert({
             user1_id: userId,
             user2_id: partner.user_id,
-            user1_display_name: myEntry.display_name || 'Anonymous',
-            user2_display_name: partner.display_name || 'Anonymous',
+            user1_display_name: myEntry.display_name,
+            user2_display_name: partner.display_name,
             status: 'active',
             started_at: new Date().toISOString(),
           })
@@ -112,7 +136,7 @@ export function useMatchmaking() {
           if (pollingRef.current) clearInterval(pollingRef.current)
           setMatchFound({
             session_id: session.id,
-            match_display_name: partner.display_name || 'Anonymous',
+            match_display_name: partner.display_name,
             match_user_id: partner.user_id,
           })
           setIsInQueue(false)
@@ -128,23 +152,33 @@ export function useMatchmaking() {
     setError(null)
     try {
       let userId = getUserId()
+      let displayName = params.displayName || ''
       
       if (!userId) {
         userId = generateUUID()
+        // Get a fun name for guest users
+        displayName = await getFunName()
+        setMyDisplayName(displayName)
+      } else {
+        // For registered users, get their name from params or use default
+        displayName = params.displayName || 'User' + userId.slice(-4)
       }
 
       myUserIdRef.current = userId
+      
+      // Clean up any existing queue entries
       await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
 
       const { error: insertError } = await supabase
         .from('matchmaking_queue')
         .insert({
           user_id: userId,
-          display_name: params.displayName || 'Anonymous',
+          display_name: displayName,
           is_guest: !getUserId(),
           tier: params.tier || 'free',
           interests: params.interests || [],
           matched_at: null,
+          entered_at: new Date().toISOString(),
         })
 
       if (insertError) {
@@ -167,10 +201,16 @@ export function useMatchmaking() {
 
   const leaveQueue = async () => {
     const userId = myUserIdRef.current || getUserId()
-    if (pollingRef.current) clearInterval(pollingRef.current)
-    if (userId) await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    if (userId) {
+      await supabase.from('matchmaking_queue').delete().eq('user_id', userId)
+    }
     setIsInQueue(false)
     setMatchFound(null)
+    setMyDisplayName('')
   }
 
   return {
@@ -182,5 +222,6 @@ export function useMatchmaking() {
     leaveQueue,
     isLoading,
     error,
+    myDisplayName, // Add this so components can show the fun name
   }
 }
