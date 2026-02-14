@@ -74,6 +74,16 @@ const nextConfig = {
     }
     return config
   },
+
+  // ADD THIS SECTION to force include missing pages
+  exportPathMap: async function (defaultPathMap) {
+    return {
+      ...defaultPathMap,
+      '/debug': { page: '/debug' },
+      '/admin/monitoring': { page: '/admin/monitoring' },
+      '/api/health': { page: '/api/health' },
+    }
+  },
 }
 
 module.exports = nextConfig
