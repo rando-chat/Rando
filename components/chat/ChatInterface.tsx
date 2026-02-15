@@ -156,13 +156,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         )}
       </div>
 
-      {/* Input Area - FIXED: Call sendTyping with true inside empty function */}
+      {/* Input Area - REMOVED onImageUpload */}
       {!chat.partnerLeft && (
         <ChatInput
           onSendMessage={chat.sendMessage}
           onTyping={() => chat.sendTyping(true)}
           isSending={chat.isSending}
-          onImageUpload={handleImageUpload}
           disabled={chat.partnerLeft}
         />
       )}
@@ -191,7 +190,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         onAddFriend={handleAddFriend}
       />
 
-      {/* Modals */}
+      {/* Modals - Image upload happens here */}
       <ChatModals
         showReport={showReport}
         onCloseReport={() => setShowReport(false)}
