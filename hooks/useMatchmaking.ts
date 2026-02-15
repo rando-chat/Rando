@@ -19,11 +19,26 @@ export function useMatchmaking() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        // Check if we already have a session in localStorage
+        const storedSession = localStorage.getItem('rando-guest-session')
+        
+        if (storedSession) {
+          const parsedSession = JSON.parse(storedSession)
+          setSession(parsedSession)
+          console.log('📦 Loaded existing session from storage:', parsedSession)
+          startBackgroundPolling()
+          return
+        }
+
+        // Create new session if none exists
         const { data, error } = await supabase.rpc('create_guest_session')
         if (error) throw error
         if (data && data.length > 0) {
-          setSession(data[0])
-          // Start background polling immediately
+          const newSession = data[0]
+          setSession(newSession)
+          // Store in localStorage
+          localStorage.setItem('rando-guest-session', JSON.stringify(newSession))
+          console.log('🆕 Created and stored new session:', newSession)
           startBackgroundPolling()
         }
       } catch (err: any) {
@@ -35,16 +50,14 @@ export function useMatchmaking() {
 
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current)
-      if (session?.guest_id) {
-        supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
-      }
+      // Don't delete session on unmount - we want to keep it
     }
   }, [])
 
   // Background polling - checks queue but doesn't auto-join
   const startBackgroundPolling = () => {
     if (pollingRef.current) clearInterval(pollingRef.current)
-    
+
     // Poll every 2 seconds for queue stats
     pollingRef.current = setInterval(async () => {
       if (!session) return
@@ -58,7 +71,7 @@ export function useMatchmaking() {
 
       if (queue) {
         setUsersInQueue(queue.length)
-        
+
         // Find user's position if they're in queue
         const userIndex = queue.findIndex(u => u.user_id === session.guest_id)
         if (userIndex !== -1) {
@@ -78,7 +91,7 @@ export function useMatchmaking() {
 
     setIsLoading(true)
     forceMatchRef.current = true
-    
+
     try {
       // Clean up any old entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
@@ -96,7 +109,7 @@ export function useMatchmaking() {
       if (error) throw error
 
       setIsInQueue(true)
-      
+
       // Run checkForMatch immediately and aggressively
       await checkForMatch(true) // true = force mode
 
@@ -200,7 +213,6 @@ export function useMatchmaking() {
 
   const joinQueue = async () => {
     if (!session) return
-    // This now just calls forceMatch
     await forceMatch()
   }
 
@@ -216,7 +228,7 @@ export function useMatchmaking() {
     setEstimatedWait(30)
     setQueuePosition(1)
     setUsersInQueue(0)
-    
+
     // Restart background polling
     startBackgroundPolling()
   }
@@ -226,8 +238,8 @@ export function useMatchmaking() {
     isInQueue,
     estimatedWait,
     matchFound,
-    joinQueue, // Now calls forceMatch
-    forceMatch, // Expose force match directly
+    joinQueue,
+    forceMatch,
     leaveQueue,
     isLoading,
     error,
