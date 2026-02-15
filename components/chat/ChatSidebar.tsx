@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useState } from 'react'
+import { useFriends } from '@/hooks/useFriends'
 
 interface ChatSidebarProps {
   isOpen: boolean
@@ -15,14 +15,6 @@ interface ChatSidebarProps {
   guestId?: string
 }
 
-interface Friend {
-  id: string
-  friend_id: string
-  friend_name: string
-  status: 'pending' | 'accepted' | 'rejected'
-  created_at: string
-}
-
 export function ChatSidebar({
   isOpen,
   onClose,
@@ -34,98 +26,17 @@ export function ChatSidebar({
   onAddFriend,
   guestId
 }: ChatSidebarProps) {
-  const [friends, setFriends] = useState<Friend[]>([])
-  const [pendingRequests, setPendingRequests] = useState<Friend[]>([])
-  const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'info'>('info')
-
-  useEffect(() => {
-    if (isOpen && guestId) {
-      loadFriends()
-      loadPendingRequests()
-    }
-  }, [isOpen, guestId])
-
-  const loadFriends = async () => {
-    if (!guestId) return
-    setLoading(true)
-
-    const { data } = await supabase
-      .from('friends')
-      .select(`
-        id,
-        friend_id,
-        status,
-        created_at,
-        friend:guest_sessions!friend_id(display_name)
-      `)
-      .eq('user_id', guestId)
-      .eq('status', 'accepted')
-      .order('created_at', { ascending: false })
-
-    if (data) {
-      const formattedFriends = data.map(f => ({
-        id: f.id,
-        friend_id: f.friend_id,
-        friend_name: f.friend?.[0]?.display_name || 'Unknown',
-        status: f.status,
-        created_at: f.created_at,
-      }))
-      setFriends(formattedFriends)
-    }
-    setLoading(false)
-  }
-
-  const loadPendingRequests = async () => {
-    if (!guestId) return
-
-    const { data } = await supabase
-      .from('friends')
-      .select(`
-        id,
-        user_id,
-        status,
-        created_at,
-        requester:guest_sessions!user_id(display_name)
-      `)
-      .eq('friend_id', guestId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-
-    if (data) {
-      const formattedRequests = data.map(r => ({
-        id: r.id,
-        friend_id: r.user_id,
-        friend_name: r.requester?.[0]?.display_name || 'Unknown',
-        status: r.status,
-        created_at: r.created_at
-      }))
-      setPendingRequests(formattedRequests)
-    }
-  }
-
-  const acceptRequest = async (requestId: string) => {
-    await supabase
-      .from('friends')
-      .update({ status: 'accepted' })
-      .eq('id', requestId)
-    await loadFriends()
-    await loadPendingRequests()
-  }
-
-  const rejectRequest = async (requestId: string) => {
-    await supabase
-      .from('friends')
-      .update({ status: 'rejected' })
-      .eq('id', requestId)
-    await loadPendingRequests()
-  }
-
-  const removeFriend = async (friendId: string) => {
-    if (!confirm('Remove this friend?')) return
-    await supabase.from('friends').delete().eq('id', friendId)
-    await loadFriends()
-  }
+  
+  const { 
+    friends, 
+    pendingRequests, 
+    sentRequests, 
+    loading,
+    acceptRequest, 
+    rejectRequest, 
+    removeFriend 
+  } = useFriends(guestId)
 
   if (!isOpen) return null
 
@@ -228,10 +139,11 @@ export function ChatSidebar({
             color: activeTab === 'requests' ? '#7c3aed' : '#a0a0b0',
             cursor: 'pointer',
             fontSize: '14px',
+            position: 'relative',
           }}
         >
           Requests
-          {pendingRequests.length > 0 && (
+          {(pendingRequests.length > 0 || sentRequests.length > 0) && (
             <span style={{
               position: 'absolute',
               background: '#ef4444',
@@ -241,7 +153,7 @@ export function ChatSidebar({
               borderRadius: '10px',
               marginLeft: '8px',
             }}>
-              {pendingRequests.length}
+              {pendingRequests.length + sentRequests.length}
             </span>
           )}
         </button>
@@ -389,16 +301,86 @@ export function ChatSidebar({
         {/* REQUESTS TAB */}
         {activeTab === 'requests' && (
           <div>
-            <h4 style={{
-              fontSize: '16px',
-              color: '#f0f0f0',
-              marginBottom: '16px',
-              fontFamily: "'Georgia', serif",
-            }}>
-              Friend Requests
-            </h4>
+            {/* Incoming Requests */}
+            {pendingRequests.length > 0 && (
+              <>
+                <h4 style={{
+                  fontSize: '14px',
+                  color: '#f0f0f0',
+                  marginBottom: '12px',
+                  fontFamily: "'Georgia', serif",
+                }}>
+                  Incoming Requests
+                </h4>
+                {pendingRequests.map(request => (
+                  <div key={request.id} style={requestItemStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <div style={friendAvatarStyle}>
+                        {request.friend_name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ color: '#f0f0f0', fontWeight: 500 }}>
+                          {request.friend_name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#f59e0b' }}>
+                          ⏳ Wants to connect
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => acceptRequest(request.id)}
+                        style={acceptButtonStyle}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => rejectRequest(request.id)}
+                        style={rejectButtonStyle}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
 
-            {pendingRequests.length === 0 && (
+            {/* Sent Requests */}
+            {sentRequests.length > 0 && (
+              <>
+                <h4 style={{
+                  fontSize: '14px',
+                  color: '#f0f0f0',
+                  margin: pendingRequests.length > 0 ? '24px 0 12px' : '0 0 12px',
+                  fontFamily: "'Georgia', serif",
+                }}>
+                  Sent Requests
+                </h4>
+                {sentRequests.map(request => (
+                  <div key={request.id} style={{
+                    ...requestItemStyle,
+                    background: 'rgba(255,255,255,0.03)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={friendAvatarStyle}>
+                        {request.friend_name[0]?.toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ color: '#f0f0f0', fontWeight: 500 }}>
+                          {request.friend_name}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                          ⏳ Pending
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {pendingRequests.length === 0 && sentRequests.length === 0 && (
               <div style={{
                 textAlign: 'center',
                 color: '#60607a',
@@ -410,38 +392,6 @@ export function ChatSidebar({
                 <p>No pending requests</p>
               </div>
             )}
-
-            {pendingRequests.map(request => (
-              <div key={request.id} style={requestItemStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <div style={friendAvatarStyle}>
-                    {request.friend_name[0]?.toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ color: '#f0f0f0', fontWeight: 500 }}>
-                      {request.friend_name}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#f59e0b' }}>
-                      ⏳ Wants to connect
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => acceptRequest(request.id)}
-                    style={acceptButtonStyle}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => rejectRequest(request.id)}
-                    style={rejectButtonStyle}
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </div>
