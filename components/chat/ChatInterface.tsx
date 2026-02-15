@@ -18,7 +18,7 @@ interface ChatInterfaceProps {
 export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const router = useRouter()
   const chat = useChat(sessionId)
-  
+
   const [showSidebar, setShowSidebar] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -26,20 +26,28 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const [showSafetyWarning, setShowSafetyWarning] = useState(false)
   const [chatDuration, setChatDuration] = useState('0m')
   const [messageCount, setMessageCount] = useState(0)
-  
+  const [leftAt, setLeftAt] = useState<string | undefined>()
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Update stats
   useEffect(() => {
     if (chat.messages.length > 0) {
       setMessageCount(chat.messages.length)
-      
+
       const firstMsg = new Date(chat.messages[0].created_at)
       const now = new Date()
       const diff = Math.floor((now.getTime() - firstMsg.getTime()) / 60000)
       setChatDuration(`${diff}m`)
     }
   }, [chat.messages])
+
+  // Set leftAt when partner leaves
+  useEffect(() => {
+    if (chat.partnerLeft && !leftAt) {
+      setLeftAt(new Date().toISOString())
+    }
+  }, [chat.partnerLeft, leftAt])
 
   // Handle escape key to close modals
   useEffect(() => {
@@ -86,10 +94,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     // Implement image upload logic here
     // This should upload to Supabase Storage and send message with URL
     console.log('Uploading image:', file.name)
-    
+
     // Simulate upload
     await new Promise(resolve => setTimeout(resolve, 1000))
-    
+
     // Send message with image URL (you'd get the actual URL from storage)
     await chat.sendMessage(`📷 Image: [Uploaded: ${file.name}]`)
   }
@@ -136,6 +144,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           partnerName={chat.partnerName}
           onImageClick={setSelectedImage}
           messagesEndRef={chat.messagesEndRef}
+          leftAt={leftAt} // ✅ ADD THIS LINE
         />
 
         {/* Typing Indicator */}
