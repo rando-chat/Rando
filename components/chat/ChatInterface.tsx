@@ -10,6 +10,7 @@ import { ChatSidebar } from './ChatSidebar'
 import { ChatModals } from './ChatModals'
 import { TypingIndicator } from './TypingIndicator'
 import { SafetyWarning } from './SafetyWarning'
+import { DebugLogger } from './DebugLogger'
 
 interface ChatInterfaceProps {
   sessionId: string
@@ -30,6 +31,29 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 ChatInterface mounted with sessionId:', sessionId)
+    console.log('🔍 Guest session:', chat.guestSession)
+    console.log('🔍 Partner name:', chat.partnerName)
+    console.log('🔍 My name:', chat.myName)
+    console.log('🔍 Messages count:', chat.messages.length)
+  }, [sessionId, chat.guestSession, chat.partnerName, chat.myName, chat.messages])
+
+  // Log when messages update
+  useEffect(() => {
+    if (chat.messages.length > 0) {
+      const lastMsg = chat.messages[chat.messages.length - 1]
+      console.log('📨 New message:', {
+        id: lastMsg.id,
+        from: lastMsg.sender_display_name,
+        content: lastMsg.content,
+        isImage: lastMsg.content.startsWith('📷 Image:'),
+        time: new Date(lastMsg.created_at).toLocaleTimeString()
+      })
+    }
+  }, [chat.messages])
+
   // Update stats
   useEffect(() => {
     if (chat.messages.length > 0) {
@@ -46,6 +70,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   useEffect(() => {
     if (chat.partnerLeft && !leftAt) {
       setLeftAt(new Date().toISOString())
+      console.log('👋 Partner left at:', leftAt)
     }
   }, [chat.partnerLeft, leftAt])
 
@@ -64,6 +89,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   }, [])
 
   const handleEndChat = async () => {
+    console.log('👋 Ending chat...')
     await chat.endChat()
     router.push('/matchmaking')
   }
@@ -71,32 +97,46 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const handleReport = async (reason: string, category: string = 'other') => {
     if (!chat.guestSession || !sessionId) return
     
+    console.log('⚠️ Reporting user:', { reason, category })
     try {
       await chat.reportUser(reason, category)
       setShowReport(false)
       setShowSafetyWarning(true)
       setTimeout(() => setShowSafetyWarning(false), 3000)
+      console.log('✅ Report submitted')
     } catch (err) {
-      console.error('Report error:', err)
+      console.error('❌ Report error:', err)
     }
   }
 
   const handleBlock = async () => {
     if (confirm('Block this user? They will not be able to match with you again.')) {
+      console.log('🚫 Blocking user...')
       await chat.blockUser()
       await handleEndChat()
     }
   }
 
   const handleAddFriend = async () => {
+    console.log('➕ Adding friend...')
     await chat.addFriend()
     setShowSafetyWarning(true)
     setTimeout(() => setShowSafetyWarning(false), 3000)
+    console.log('✅ Friend request sent')
   }
 
   const handleImageUpload = async (file: File) => {
-    if (!chat.guestSession || !sessionId) return
-    await chat.uploadImage(file)
+    if (!chat.guestSession || !sessionId) {
+      console.log('❌ Cannot upload image: missing session')
+      return
+    }
+    console.log('📷 Starting image upload:', file.name)
+    const result = await chat.uploadImage(file)
+    if (result) {
+      console.log('✅ Image uploaded successfully:', result)
+    } else {
+      console.log('❌ Image upload failed')
+    }
   }
 
   return (
@@ -143,8 +183,14 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         isOnline={true}
         isTyping={chat.isTyping}
         partnerLeft={chat.partnerLeft}
-        onOpenSidebar={() => setShowSidebar(true)}
-        onReport={() => setShowReport(true)}
+        onOpenSidebar={() => {
+          console.log('📊 Opening sidebar')
+          setShowSidebar(true)
+        }}
+        onReport={() => {
+          console.log('⚠️ Opening report modal')
+          setShowReport(true)
+        }}
         onEndChat={handleEndChat}
       />
 
@@ -163,7 +209,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           currentUserName={chat.guestSession?.display_name}
           partnerLeft={chat.partnerLeft}
           partnerName={chat.partnerName}
-          onImageClick={setSelectedImage}
+          onImageClick={(url) => {
+            console.log('🖼️ Opening image:', url)
+            setSelectedImage(url)
+          }}
           messagesEndRef={chat.messagesEndRef}
           leftAt={leftAt}
         />
@@ -180,13 +229,16 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {!chat.partnerLeft && (
         <ChatInput
           sessionId={sessionId}
-          // Wrap sendMessage to ignore return value
           onSendMessage={async (content) => {
+            console.log('📤 Sending message:', content)
             await chat.sendMessage(content)
           }}
           onTyping={() => chat.sendTyping(true)}
           isSending={chat.isSending}
-          onEditImage={setEditImage}
+          onEditImage={(url) => {
+            console.log('✏️ Editing image:', url)
+            setEditImage(url)
+          }}
         />
       )}
 
@@ -202,7 +254,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {/* Sidebar */}
       <ChatSidebar
         isOpen={showSidebar}
-        onClose={() => setShowSidebar(false)}
+        onClose={() => {
+          console.log('📊 Closing sidebar')
+          setShowSidebar(false)
+        }}
         partnerName={chat.partnerName}
         chatDuration={chatDuration}
         messageCount={messageCount}
@@ -218,17 +273,37 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {/* Modals */}
       <ChatModals
         showReport={showReport}
-        onCloseReport={() => setShowReport(false)}
+        onCloseReport={() => {
+          console.log('⚠️ Closing report modal')
+          setShowReport(false)
+        }}
         onSubmitReport={handleReport}
         selectedImage={selectedImage}
-        onCloseImage={() => setSelectedImage(null)}
+        onCloseImage={() => {
+          console.log('🖼️ Closing image')
+          setSelectedImage(null)
+        }}
         editImage={editImage}
-        onCloseEdit={() => setEditImage(null)}
+        onCloseEdit={() => {
+          console.log('✏️ Closing edit')
+          setEditImage(null)
+        }}
         onSendEdit={(file) => {
           handleImageUpload(file)
           setEditImage(null)
         }}
       />
+
+      {/* Debug Logger - Only in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <DebugLogger
+          sessionId={sessionId}
+          guestSession={chat.guestSession}
+          messages={chat.messages}
+          partnerName={chat.partnerName}
+          myName={chat.myName || ''}
+        />
+      )}
     </div>
   )
 }
