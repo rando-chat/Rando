@@ -7,7 +7,6 @@ interface MatchFoundProps {
   match: {
     id: string
     partnerName: string
-    matchScore?: number
     sharedInterests?: string[]
   }
   onCancel?: () => void
@@ -17,10 +16,9 @@ export function MatchFound({ match, onCancel }: MatchFoundProps) {
   const router = useRouter()
 
   useEffect(() => {
-    // Auto-redirect after 3 seconds
     const timer = setTimeout(() => {
       router.push(`/chat/${match.id}`)
-    }, 3000)
+    }, 2000) // 2 seconds like debug
 
     return () => clearTimeout(timer)
   }, [match.id, router])
@@ -36,7 +34,8 @@ export function MatchFound({ match, onCancel }: MatchFoundProps) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1000
+      zIndex: 1000,
+      animation: 'fadeIn 0.3s ease'
     }}>
       <div style={{
         background: 'white',
@@ -44,8 +43,9 @@ export function MatchFound({ match, onCancel }: MatchFoundProps) {
         padding: '40px',
         maxWidth: '400px',
         textAlign: 'center',
-        animation: 'popIn 0.5s ease'
+        animation: 'popIn 0.3s ease'
       }}>
+        {/* Success emoji (like debug) */}
         <div style={{
           fontSize: '64px',
           marginBottom: '20px',
@@ -63,25 +63,17 @@ export function MatchFound({ match, onCancel }: MatchFoundProps) {
           Match Found!
         </h2>
         
+        {/* Partner name (like debug) */}
         <p style={{
           fontSize: '20px',
           color: '#667eea',
           fontWeight: 600,
-          marginBottom: '8px'
+          marginBottom: '16px'
         }}>
           {match.partnerName}
         </p>
         
-        {match.matchScore && (
-          <p style={{
-            fontSize: '14px',
-            color: '#10b981',
-            marginBottom: '16px'
-          }}>
-            Match Score: {match.matchScore}%
-          </p>
-        )}
-        
+        {/* Shared interests (like debug) */}
         {match.sharedInterests && match.sharedInterests.length > 0 && (
           <div style={{
             background: '#f3f4f6',
@@ -109,36 +101,23 @@ export function MatchFound({ match, onCancel }: MatchFoundProps) {
           </div>
         )}
         
+        {/* Redirect message (like debug) */}
         <p style={{
           fontSize: '14px',
-          color: '#6b7280',
-          marginBottom: '24px'
+          color: '#6b7280'
         }}>
-          Redirecting to chat in 3 seconds...
+          Redirecting to chat...
         </p>
-        
-        {onCancel && (
-          <button
-            onClick={onCancel}
-            style={{
-              padding: '12px 24px',
-              background: '#ef4444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '16px'
-            }}
-          >
-            Cancel
-          </button>
-        )}
       </div>
 
       <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
         @keyframes popIn {
-          0% { transform: scale(0.8); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
         @keyframes bounce {
           0%, 100% { transform: translateY(0); }
