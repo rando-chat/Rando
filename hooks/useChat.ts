@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 export function useChat(sessionId: string) {
   const [messages, setMessages] = useState<any[]>([])
   const [guestSession, setGuestSession] = useState<any>(null)
-  const [partnerName, setPartnerName] = useState('')  // KEEP THIS
+  const [partnerName, setPartnerName] = useState('')
   const [myName, setMyName] = useState('')
   const [partnerLeft, setPartnerLeft] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
@@ -277,7 +277,7 @@ export function useChat(sessionId: string) {
   return {
     messages,
     guestSession,
-    partnerName,  // KEEP THIS
+    partnerName,
     myName,
     partnerLeft,
     isTyping,
