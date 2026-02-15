@@ -49,7 +49,7 @@ export default function AccountSettings() {
     }
 
     const { error } = await supabase.auth.updateUser({ password: newPassword })
-    
+
     if (error) {
       setError(error.message)
     } else {
@@ -69,7 +69,7 @@ export default function AccountSettings() {
     const newEmail = formData.get('newEmail') as string
 
     const { error } = await supabase.auth.updateUser({ email: newEmail })
-    
+
     if (error) {
       setError(error.message)
     } else {
