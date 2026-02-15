@@ -8,10 +8,9 @@ interface ChatMessagesProps {
   currentUserId?: string
   currentUserName?: string
   partnerLeft: boolean
-  partnerName?: string  // Make optional
-  leftAt?: string | null
   onImageClick: (url: string) => void
   messagesEndRef: React.RefObject<HTMLDivElement>
+  leftAt?: string | null
 }
 
 export function ChatMessages({
@@ -19,10 +18,9 @@ export function ChatMessages({
   currentUserId,
   currentUserName,
   partnerLeft,
-  partnerName = '',  // Default value
-  leftAt,
   onImageClick,
-  messagesEndRef
+  messagesEndRef,
+  leftAt
 }: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
@@ -40,6 +38,10 @@ export function ChatMessages({
       </div>
     )
   }
+
+  // Get partner name from first message that's not from current user
+  const firstPartnerMsg = messages.find(m => m.sender_id !== currentUserId)
+  const partnerName = firstPartnerMsg?.sender_display_name || 'Partner'
 
   return (
     <div style={{
@@ -140,7 +142,7 @@ export function ChatMessages({
             backdropFilter: 'blur(4px)',
           }}>
             <p style={{ color: '#a0a0b0', margin: 0, fontSize: 'clamp(13px, 3.2vw, 14px)' }}>
-              👋 {partnerName || 'Partner'} left the chat
+              👋 {partnerName} left the chat
             </p>
             {leftAt && (
               <p style={{
