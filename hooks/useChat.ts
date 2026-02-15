@@ -8,6 +8,7 @@ export function useChat(sessionId: string) {
   const [messages, setMessages] = useState<any[]>([])
   const [guestSession, setGuestSession] = useState<any>(null)
   const [partnerName, setPartnerName] = useState('')
+  const [myName, setMyName] = useState('')
   const [partnerLeft, setPartnerLeft] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [isSending, setIsSending] = useState(false)
@@ -26,6 +27,8 @@ export function useChat(sessionId: string) {
         if (error) throw error
         if (data && data.length > 0) {
           setGuestSession(data[0])
+          setMyName(data[0].display_name)
+          console.log('👤 My guest session:', data[0])
         }
       } catch (err: any) {
         setError(err.message)
@@ -52,11 +55,22 @@ export function useChat(sessionId: string) {
 
         if (sessionError) throw sessionError
 
-        // Set partner name
+        console.log('📊 Session data:', session)
+        console.log('👤 My guest ID:', guestSession.guest_id)
+
+        // CORRECTLY identify partner name
         if (session.user1_id === guestSession.guest_id) {
+          // Current user is user1, partner is user2
           setPartnerName(session.user2_display_name)
+          setMyName(session.user1_display_name)
+          console.log('✅ I am user1:', session.user1_display_name)
+          console.log('👥 Partner is user2:', session.user2_display_name)
         } else {
+          // Current user is user2, partner is user1
           setPartnerName(session.user1_display_name)
+          setMyName(session.user2_display_name)
+          console.log('✅ I am user2:', session.user2_display_name)
+          console.log('👥 Partner is user1:', session.user1_display_name)
         }
 
         // Load messages
@@ -433,6 +447,7 @@ export function useChat(sessionId: string) {
     messages,
     guestSession,
     partnerName,
+    myName,
     partnerLeft,
     isTyping,
     isSending,
