@@ -4,104 +4,139 @@ interface QueueStatusProps {
   isInQueue: boolean
   onJoin: () => void
   onLeave: () => void
-  estimatedWait?: number
-  queuePosition?: number
+  isLoading: boolean
+  displayName: string
 }
 
 export function QueueStatus({
   isInQueue,
   onJoin,
   onLeave,
-  estimatedWait = 30,
-  queuePosition = 1
+  isLoading,
+  displayName
 }: QueueStatusProps) {
-  if (isInQueue) {
-    return (
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        borderRadius: '12px',
-        padding: '20px',
-        color: 'white',
-        textAlign: 'center'
-      }}>
-        <div style={{
-          fontSize: '14px',
-          opacity: 0.9,
-          marginBottom: '8px'
-        }}>
-          You are in queue
-        </div>
-        
-        <div style={{
-          fontSize: '32px',
-          fontWeight: 'bold',
-          marginBottom: '4px'
-        }}>
-          #{queuePosition}
-        </div>
-        
-        <div style={{
-          fontSize: '14px',
-          opacity: 0.9,
-          marginBottom: '16px'
-        }}>
-          Est. wait: {estimatedWait}s
-        </div>
-        
-        <button
-          onClick={onLeave}
-          style={{
-            padding: '10px 20px',
-            background: 'rgba(255,255,255,0.2)',
-            color: 'white',
-            border: '2px solid white',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
-          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-        >
-          Leave Queue
-        </button>
-      </div>
-    )
-  }
-
   return (
     <div style={{
       background: 'white',
-      borderRadius: '12px',
-      padding: '20px',
-      textAlign: 'center',
-      border: '2px dashed #e5e7eb'
+      borderRadius: '16px',
+      padding: '24px',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      textAlign: 'center'
     }}>
+      {/* User display (like debug) */}
       <div style={{
-        fontSize: '16px',
-        color: '#6b7280',
-        marginBottom: '16px'
+        background: '#f3f4f6',
+        borderRadius: '12px',
+        padding: '12px',
+        marginBottom: '20px'
       }}>
-        Not in queue
+        <p style={{
+          fontSize: '14px',
+          color: '#6b7280',
+          marginBottom: '4px'
+        }}>
+          You are:
+        </p>
+        <p style={{
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#667eea'
+        }}>
+          {displayName}
+        </p>
       </div>
-      
-      <button
-        onClick={onJoin}
-        style={{
-          padding: '12px 24px',
-          background: '#667eea',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '16px',
-          fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(102,126,234,0.4)'
-        }}
-      >
-        Join Queue
-      </button>
+
+      {!isInQueue ? (
+        <>
+          <h3 style={{
+            fontSize: '20px',
+            fontWeight: 600,
+            color: '#1f2937',
+            marginBottom: '12px'
+          }}>
+            Ready to Chat?
+          </h3>
+          
+          <p style={{
+            fontSize: '14px',
+            color: '#6b7280',
+            marginBottom: '24px'
+          }}>
+            Click below to find a random stranger
+          </p>
+
+          <button
+            onClick={onJoin}
+            disabled={isLoading}
+            style={{
+              width: '100%',
+              padding: '16px 24px',
+              background: isLoading ? '#9ca3af' : '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              fontSize: '18px',
+              fontWeight: 600,
+              boxShadow: isLoading ? 'none' : '0 4px 12px rgba(102,126,234,0.4)',
+              transition: 'all 0.2s'
+            }}
+          >
+            {isLoading ? 'Joining...' : 'Find a Stranger'}
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            marginBottom: '16px'
+          }}>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              background: '#10b981',
+              borderRadius: '50%',
+              animation: 'pulse 2s infinite'
+            }} />
+            <span style={{
+              fontSize: '16px',
+              color: '#1f2937',
+              fontWeight: 500
+            }}>
+              In Queue
+            </span>
+          </div>
+
+          <button
+            onClick={onLeave}
+            style={{
+              padding: '12px 24px',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 500,
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
+          >
+            Leave Queue
+          </button>
+        </>
+      )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   )
 }
