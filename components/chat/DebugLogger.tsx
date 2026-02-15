@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase/client'  // ✅ ADD THIS IMPORT
 
 interface DebugLoggerProps {
   sessionId: string
