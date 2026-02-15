@@ -4,66 +4,44 @@ import { useEffect } from 'react'
 
 interface SafetyWarningProps {
   message: string
-  type?: 'warning' | 'error' | 'success' | 'info'
-  duration?: number
+  type: 'success' | 'warning' | 'error'
   onClose: () => void
 }
 
-export function SafetyWarning({ 
-  message, 
-  type = 'warning', 
-  duration = 3000, 
-  onClose 
-}: SafetyWarningProps) {
+export function SafetyWarning({ message, type, onClose }: SafetyWarningProps) {
   useEffect(() => {
-    const timer = setTimeout(onClose, duration)
+    const timer = setTimeout(onClose, 3000)
     return () => clearTimeout(timer)
-  }, [duration, onClose])
+  }, [onClose])
 
   const colors = {
-    warning: { bg: '#fef3c7', text: '#92400e', border: '#fbbf24' },
-    error: { bg: '#fee2e2', text: '#b91c1c', border: '#ef4444' },
-    success: { bg: '#d1fae5', text: '#065f46', border: '#10b981' },
-    info: { bg: '#dbeafe', text: '#1e40af', border: '#3b82f6' }
+    success: { bg: 'rgba(34,197,94,0.1)', border: '#22c55e', text: '#86efac' },
+    warning: { bg: 'rgba(234,179,8,0.1)', border: '#eab308', text: '#fde047' },
+    error: { bg: 'rgba(239,68,68,0.1)', border: '#ef4444', text: '#fca5a5' }
   }
 
-  const color = colors[type]
+  const style = colors[type]
 
   return (
     <div style={{
       position: 'fixed',
-      top: '20px',
-      right: '20px',
-      background: color.bg,
-      color: color.text,
-      borderLeft: `4px solid ${color.border}`,
-      padding: '12px 20px',
+      bottom: '20px',
+      left: '20px',
+      background: style.bg,
+      border: `1px solid ${style.border}`,
       borderRadius: '8px',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+      padding: '12px 20px',
+      color: style.text,
+      fontSize: '14px',
       zIndex: 1000,
-      animation: 'slideIn 0.3s ease'
+      animation: 'slideUp 0.3s ease',
+      backdropFilter: 'blur(4px)',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span>⚠️</span>
-        <span style={{ fontSize: '14px' }}>{message}</span>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            marginLeft: '12px',
-            cursor: 'pointer',
-            fontSize: '16px',
-            color: color.text
-          }}
-        >
-          ✕
-        </button>
-      </div>
+      {message}
       <style>{`
-        @keyframes slideIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
         }
       `}</style>
     </div>
