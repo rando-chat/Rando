@@ -10,6 +10,14 @@ export function useChat(sessionId: string) {
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const channelRef = useRef<any>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll function
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 100)
+  }
 
   useEffect(() => {
     const initialize = async () => {
@@ -41,7 +49,11 @@ export function useChat(sessionId: string) {
           .eq('session_id', sessionId)
           .order('created_at', { ascending: true })
 
-        if (msgs) setMessages(msgs)
+        if (msgs) {
+          setMessages(msgs)
+          // Scroll to bottom after loading messages
+          scrollToBottom()
+        }
 
         // Subscribe to new messages
         subscribeToMessages()
@@ -78,6 +90,9 @@ export function useChat(sessionId: string) {
           if (prev.some(m => m.id === msg.id)) return prev
           return [...prev, msg]
         })
+        
+        // 🔥 AUTO-SCROLL ON NEW MESSAGE
+        scrollToBottom()
       })
       .subscribe()
 
@@ -130,5 +145,6 @@ export function useChat(sessionId: string) {
     error,
     sendMessage,
     endChat,
+    messagesEndRef, // 👈 Export ref for the component to use
   }
 }
