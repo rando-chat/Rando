@@ -112,8 +112,14 @@ export function useMatchmaking() {
         return
       }
 
-      const partner = queue.find(u => u.user_id !== session.guest_id)
-      if (!partner) return
+      // 🔥 FIX: Get the first person in queue that's not you
+      // This ensures we always match with the oldest waiting user
+      const partner = queue[0].user_id === session.guest_id ? queue[1] : queue[0]
+      
+      if (!partner) {
+        setEstimatedWait(prev => Math.max(5, prev - 1))
+        return
+      }
 
       // Create session if I should
       if (session.guest_id < partner.user_id) {
