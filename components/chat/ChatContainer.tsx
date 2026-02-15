@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useChat } from '@/hooks/useChat'
 import { ChatHeader } from './ChatHeader'
 import { ChatMessages } from './ChatMessages'
 import { ChatInput } from './ChatInput'
 import { ChatModals } from './ChatModals'
+import { TypingIndicator } from './TypingIndicator'
 
 interface ChatContainerProps {
   sessionId: string
@@ -19,7 +20,20 @@ export function ChatContainer({ sessionId }: ChatContainerProps) {
   const [showReport, setShowReport] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [editImage, setEditImage] = useState<string | null>(null)
-  const [showMenu, setShowMenu] = useState(false)
+  const [chatDuration, setChatDuration] = useState('0m')
+  const [messageCount, setMessageCount] = useState(0)
+
+  // Update stats
+  useEffect(() => {
+    if (chat.messages.length > 0) {
+      setMessageCount(chat.messages.length)
+      
+      const firstMsg = new Date(chat.messages[0].created_at)
+      const now = new Date()
+      const diff = Math.floor((now.getTime() - firstMsg.getTime()) / 60000)
+      setChatDuration(`${diff}m`)
+    }
+  }, [chat.messages])
 
   const handleEndChat = async () => {
     await chat.endChat()
@@ -27,9 +41,16 @@ export function ChatContainer({ sessionId }: ChatContainerProps) {
   }
 
   const handleReport = async (reason: string) => {
-    // You can implement report logic here
     console.log('Report:', reason)
     setShowReport(false)
+  }
+
+  const handleBlock = async () => {
+    console.log('Block user')
+  }
+
+  const handleAddFriend = async () => {
+    console.log('Add friend')
   }
 
   return (
@@ -40,29 +61,41 @@ export function ChatContainer({ sessionId }: ChatContainerProps) {
       background: '#f9fafb',
       maxWidth: '1200px',
       margin: '0 auto',
-      width: '100%'
+      width: '100%',
+      position: 'relative'
     }}>
       <ChatHeader
         partnerName={chat.partnerName}
         isOnline={true}
         isTyping={chat.isTyping}
         partnerLeft={chat.partnerLeft}
-        showMenu={showMenu}
-        onToggleMenu={() => setShowMenu(!showMenu)}
+        chatDuration={chatDuration}
+        messageCount={messageCount}
         onReport={() => setShowReport(true)}
+        onBlock={handleBlock}
+        onAddFriend={handleAddFriend}
         onEndChat={handleEndChat}
       />
 
-      <ChatMessages
-        messages={chat.messages}
-        currentUserId={chat.guestSession?.guest_id}
-        currentUserName={chat.guestSession?.display_name}
-        partnerLeft={chat.partnerLeft}
-        partnerName={chat.partnerName}
-        leftAt={null}
-        onImageClick={setSelectedImage}
-        messagesEndRef={chat.messagesEndRef}
-      />
+      <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+        <ChatMessages
+          messages={chat.messages}
+          currentUserId={chat.guestSession?.guest_id}
+          currentUserName={chat.guestSession?.display_name}
+          partnerLeft={chat.partnerLeft}
+          partnerName={chat.partnerName}
+          leftAt={null}
+          onImageClick={setSelectedImage}
+          messagesEndRef={chat.messagesEndRef}
+        />
+
+        {chat.isTyping && !chat.partnerLeft && (
+          <TypingIndicator 
+            names={[chat.partnerName]} 
+            isVisible={true} 
+          />
+        )}
+      </div>
 
       {!chat.partnerLeft && (
         <ChatInput
@@ -85,7 +118,6 @@ export function ChatContainer({ sessionId }: ChatContainerProps) {
         editImage={editImage}
         onCloseEdit={() => setEditImage(null)}
         onSendEdit={(file) => {
-          // Handle image upload
           console.log('Upload:', file)
           setEditImage(null)
         }}
