@@ -50,9 +50,12 @@ export function useChat(sessionId: string) {
         return
       }
 
-      console.log('📊 Session data from DB:', session)
+      console.log('🔍 RAW SESSION DATA:', session)
+      console.log('🔍 My guest ID:', guestSession.guest_id)
+      console.log('🔍 Session user1:', session.user1_id, session.user1_display_name)
+      console.log('🔍 Session user2:', session.user2_id, session.user2_display_name)
 
-      // CRITICAL FIX: Identify who is who
+      // FIXED: Correctly identify who is who
       if (session.user1_id === guestSession.guest_id) {
         // Current user is user1
         setMyName(session.user1_display_name)
@@ -67,8 +70,6 @@ export function useChat(sessionId: string) {
         console.log('👥 Partner is user1:', session.user1_display_name)
       } else {
         console.error('❌ Current user not found in session!')
-        console.log('Session users:', session.user1_id, session.user2_id)
-        console.log('Current user:', guestSession.guest_id)
       }
 
       // Load messages
@@ -178,7 +179,7 @@ export function useChat(sessionId: string) {
     })
   }
 
-  // Upload image - WITH EXTENSIVE LOGGING
+  // Upload image - WORKING VERSION
   const uploadImage = async (file: File) => {
     console.log('📷 ===== IMAGE UPLOAD STARTED =====')
     console.log('📷 File:', file.name)
