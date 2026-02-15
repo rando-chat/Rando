@@ -137,9 +137,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
       `}</style>
 
-      {/* Header */}
+      {/* Header - Now with direct database fetch */}
       <ChatHeader
-        partnerName={chat.partnerName}
+        sessionId={sessionId}
+        guestId={chat.guestSession?.guest_id}
         isOnline={true}
         isTyping={chat.isTyping}
         partnerLeft={chat.partnerLeft}
