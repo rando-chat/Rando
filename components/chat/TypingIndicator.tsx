@@ -8,6 +8,10 @@ interface TypingIndicatorProps {
 export function TypingIndicator({ names, isVisible }: TypingIndicatorProps) {
   if (!isVisible) return null
 
+  const text = names.length === 1 
+    ? `${names[0]} is typing...` 
+    : 'Multiple people are typing...'
+
   return (
     <div style={{
       padding: '8px 16px',
@@ -23,7 +27,7 @@ export function TypingIndicator({ names, isVisible }: TypingIndicatorProps) {
         <span style={{...dotStyle, animationDelay: '0.2s'}}>.</span>
         <span style={{...dotStyle, animationDelay: '0.4s'}}>.</span>
       </div>
-      {names.join(', ')} {names.length === 1 ? 'is' : 'are'} typing...
+      {text}
     </div>
   )
 }
@@ -33,9 +37,3 @@ const dotStyle = {
   fontSize: '20px',
   lineHeight: '12px',
 }
-
-// Add this to your global styles or component
-// @keyframes bounce {
-//   0%, 80%, 100% { transform: translateY(0); }
-//   40% { transform: translateY(-5px); }
-// }
