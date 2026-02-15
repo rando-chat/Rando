@@ -12,6 +12,7 @@ export function useChat(sessionId: string) {
   const [isTyping, setIsTyping] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true) // Add loading state
   
   const channelRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -35,6 +36,7 @@ export function useChat(sessionId: string) {
     if (!sessionId || !guestSession) return
 
     const loadMessages = async () => {
+      setLoading(true)
       console.log('📊 Loading chat for session:', sessionId)
       console.log('👤 Current user:', guestSession)
 
@@ -47,6 +49,7 @@ export function useChat(sessionId: string) {
 
       if (error) {
         console.error('❌ Error loading session:', error)
+        setLoading(false)
         return
       }
 
@@ -55,7 +58,7 @@ export function useChat(sessionId: string) {
       console.log('🔍 Session user1:', session.user1_id, session.user1_display_name)
       console.log('🔍 Session user2:', session.user2_id, session.user2_display_name)
 
-      // FIXED: Correctly identify who is who
+      // FIXED: Correctly identify who is who and set names IMMEDIATELY
       if (session.user1_id === guestSession.guest_id) {
         // Current user is user1
         setMyName(session.user1_display_name)
@@ -86,6 +89,7 @@ export function useChat(sessionId: string) {
 
       // Setup subscription
       setupSubscription()
+      setLoading(false)
     }
 
     loadMessages()
@@ -179,7 +183,7 @@ export function useChat(sessionId: string) {
     })
   }
 
-  // Upload image - WORKING VERSION
+  // Upload image
   const uploadImage = async (file: File) => {
     console.log('📷 ===== IMAGE UPLOAD STARTED =====')
     console.log('📷 File:', file.name)
@@ -342,6 +346,7 @@ export function useChat(sessionId: string) {
     partnerLeft,
     isTyping,
     isSending,
+    loading,
     error,
     messagesEndRef,
     sendMessage,
