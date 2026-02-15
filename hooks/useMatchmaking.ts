@@ -36,6 +36,18 @@ export function useMatchmaking() {
     }
   }, [])
 
+  // Generate content hash for messages
+  const generateHash = async (text: string) => {
+    try {
+      const msgBuffer = new TextEncoder().encode(text)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    } catch {
+      return null
+    }
+  }
+
   const checkForMatch = async () => {
     if (!session) return
 
@@ -57,6 +69,9 @@ export function useMatchmaking() {
         setIsInQueue(false)
         return
       }
+
+      // Only check queue if we're supposed to be in it
+      if (!isInQueue) return
 
       // Get ALL queue entries
       const { data: queue } = await supabase
@@ -92,6 +107,8 @@ export function useMatchmaking() {
             user1_display_name: session.display_name,
             user2_display_name: partner.display_name,
             status: 'active',
+            shared_interests: [],
+            match_score: null,
             started_at: new Date().toISOString()
           })
           .select()
@@ -122,14 +139,19 @@ export function useMatchmaking() {
       // Clean up old entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
-      // Join queue
+      // Join queue with all optional fields
       const { error } = await supabase.from('matchmaking_queue').insert({
         user_id: session.guest_id,
         display_name: session.display_name,
         is_guest: true,
         tier: 'free',
         interests: [],
-        entered_at: new Date().toISOString()
+        language_preference: 'en',
+        looking_for: ['text'],
+        match_preferences: { min_age: 18, max_age: 99 },
+        queue_score: 50,
+        entered_at: new Date().toISOString(),
+        last_ping_at: new Date().toISOString()
       })
 
       if (error) throw error
@@ -140,7 +162,7 @@ export function useMatchmaking() {
       // Start polling
       if (pollingRef.current) clearInterval(pollingRef.current)
       setTimeout(() => checkForMatch(), 100)
-      pollingRef.current = setInterval(checkForMatch, 500)
+      pollingRef.current = setInterval(checkForMatch, 2000) // 2 seconds for production
 
     } catch (err: any) {
       setError(err.message)
@@ -161,6 +183,76 @@ export function useMatchmaking() {
     setEstimatedWait(30)
   }
 
+  // Enhanced send message with all schema fields
+  const sendMessage = async (sessionId: string, content: string) => {
+    if (!session || !content.trim()) return
+
+    try {
+      const contentHash = await generateHash(content)
+
+      const { error } = await supabase.from('messages').insert({
+        session_id: sessionId,
+        sender_id: session.guest_id,
+        sender_is_guest: true,
+        sender_display_name: session.display_name,
+        content: content,
+        content_hash: contentHash,
+        is_safe: true, // Will be updated by DB trigger
+        delivered: true,
+        created_at: new Date().toISOString()
+      })
+
+      if (error) throw error
+      return true
+    } catch (err) {
+      console.error('Send message error:', err)
+      return false
+    }
+  }
+
+  // Upload image with proper storage
+  const uploadImage = async (file: File, sessionId: string) => {
+    if (!session) return null
+
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${session.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
+      const filePath = `chat-images/${fileName}`
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath)
+
+      // Send message with image URL
+      await sendMessage(sessionId, `📷 Image: ${publicUrl}`)
+
+      return publicUrl
+    } catch (err) {
+      console.error('Upload error:', err)
+      return null
+    }
+  }
+
+  // Mark messages as read
+  const markMessagesAsRead = async (sessionId: string, messageIds: string[]) => {
+    if (!session || !messageIds.length) return
+
+    await supabase
+      .from('messages')
+      .update({ read_by_recipient: true })
+      .in('id', messageIds)
+      .neq('sender_id', session.guest_id)
+  }
+
   return {
     session,
     isInQueue,
@@ -168,6 +260,9 @@ export function useMatchmaking() {
     matchFound,
     joinQueue,
     leaveQueue,
+    sendMessage,
+    uploadImage,
+    markMessagesAsRead,
     isLoading,
     error,
   }
