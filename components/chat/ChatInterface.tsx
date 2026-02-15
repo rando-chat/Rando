@@ -156,11 +156,11 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         )}
       </div>
 
-      {/* Input Area - FIXED: Use onTyping prop */}
+      {/* Input Area - FIXED: Call sendTyping with true inside empty function */}
       {!chat.partnerLeft && (
         <ChatInput
           onSendMessage={chat.sendMessage}
-          onTyping={(typing) => chat.sendTyping(typing)}
+          onTyping={() => chat.sendTyping(true)}
           isSending={chat.isSending}
           onImageUpload={handleImageUpload}
           disabled={chat.partnerLeft}
