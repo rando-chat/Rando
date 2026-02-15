@@ -1,96 +1,78 @@
 'use client'
 
 interface MatchmakingQueueProps {
-  position?: number
   estimatedWait: number
+  queuePosition?: number
   usersInQueue?: number
 }
 
 export function MatchmakingQueue({ 
-  position = 1, 
   estimatedWait, 
+  queuePosition = 1, 
   usersInQueue = 1 
 }: MatchmakingQueueProps) {
   return (
     <div style={{
-      background: 'white',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       borderRadius: '16px',
-      padding: '24px',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-      textAlign: 'center',
-      maxWidth: '400px',
-      margin: '0 auto'
+      padding: '32px',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+      color: 'white',
+      textAlign: 'center'
     }}>
-      {/* Animation */}
+      {/* Spinning animation (same as debug) */}
       <div style={{
         width: '80px',
         height: '80px',
         margin: '0 auto 20px',
-        position: 'relative'
-      }}>
-        <div style={{
-          width: '100%',
-          height: '100%',
-          border: '6px solid #f3f4f6',
-          borderTopColor: '#667eea',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }} />
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          fontSize: '24px',
-          fontWeight: 'bold',
-          color: '#667eea'
-        }}>
-          {position}
-        </div>
-      </div>
+        border: '4px solid rgba(255,255,255,0.3)',
+        borderTopColor: 'white',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite'
+      }} />
 
       <h3 style={{
-        fontSize: '20px',
-        fontWeight: 600,
-        color: '#1f2937',
+        fontSize: '24px',
+        fontWeight: 'bold',
         marginBottom: '8px'
       }}>
         Finding your match...
       </h3>
-
+      
       <p style={{
-        fontSize: '14px',
-        color: '#6b7280',
-        marginBottom: '20px'
+        fontSize: '16px',
+        opacity: 0.9,
+        marginBottom: '16px'
       }}>
         {usersInQueue} {usersInQueue === 1 ? 'person' : 'people'} in queue
       </p>
 
-      {/* Progress bar */}
+      {/* Position indicator (like debug) */}
       <div style={{
-        width: '100%',
-        height: '8px',
-        background: '#f3f4f6',
-        borderRadius: '4px',
-        marginBottom: '12px',
-        overflow: 'hidden'
+        background: 'rgba(255,255,255,0.2)',
+        borderRadius: '20px',
+        padding: '8px 16px',
+        display: 'inline-block',
+        marginBottom: '16px'
       }}>
-        <div style={{
-          width: `${Math.min(100, (30 - estimatedWait) / 30 * 100)}%`,
-          height: '100%',
-          background: 'linear-gradient(90deg, #667eea, #764ba2)',
-          borderRadius: '4px',
-          transition: 'width 1s ease'
-        }} />
+        Your position: <strong>#{queuePosition}</strong>
       </div>
 
-      <p style={{
+      {/* Wait time (like debug) */}
+      <div style={{
         fontSize: '14px',
-        color: '#667eea',
-        fontWeight: 600
+        opacity: 0.8,
+        marginBottom: '8px'
       }}>
-        ~{estimatedWait}s remaining
-      </p>
+        Estimated wait:
+      </div>
+      <div style={{
+        fontSize: '32px',
+        fontWeight: 'bold',
+        marginBottom: '4px'
+      }}>
+        {estimatedWait}s
+      </div>
 
       <style>{`
         @keyframes spin {
