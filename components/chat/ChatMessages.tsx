@@ -8,7 +8,7 @@ interface ChatMessagesProps {
   currentUserId?: string
   currentUserName?: string
   partnerLeft: boolean
-  partnerName: string
+  partnerName?: string  // Make optional
   leftAt?: string | null
   onImageClick: (url: string) => void
   messagesEndRef: React.RefObject<HTMLDivElement>
@@ -19,7 +19,7 @@ export function ChatMessages({
   currentUserId,
   currentUserName,
   partnerLeft,
-  partnerName,
+  partnerName = '',  // Default value
   leftAt,
   onImageClick,
   messagesEndRef
@@ -140,7 +140,7 @@ export function ChatMessages({
             backdropFilter: 'blur(4px)',
           }}>
             <p style={{ color: '#a0a0b0', margin: 0, fontSize: 'clamp(13px, 3.2vw, 14px)' }}>
-              👋 {partnerName} left the chat
+              👋 {partnerName || 'Partner'} left the chat
             </p>
             {leftAt && (
               <p style={{
