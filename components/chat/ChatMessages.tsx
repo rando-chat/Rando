@@ -26,27 +26,29 @@ export function ChatMessages({
 }: ChatMessagesProps) {
   if (messages.length === 0) {
     return (
-      <div style={{ 
-        flex: 1, 
-        display: 'flex', 
-        alignItems: 'center', 
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'center',
-        color: '#9ca3af',
-        padding: '20px'
+        color: '#60607a',
+        padding: '20px',
+        fontStyle: 'italic',
+        fontSize: 'clamp(14px, 3.5vw, 16px)',
       }}>
-        <p>No messages yet. Say hi!</p>
+        <p>No messages yet. Say hi! 👋</p>
       </div>
     )
   }
 
   return (
-    <div style={{ 
-      flex: 1, 
-      overflowY: 'auto', 
-      padding: '20px', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      gap: '16px'
+    <div style={{
+      flex: 1,
+      overflowY: 'auto',
+      padding: 'clamp(12px, 3vw, 20px)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 'clamp(8px, 2vw, 12px)',
     }}>
       {messages.map((msg) => {
         if (msg.sender_id === 'system') {
@@ -57,7 +59,6 @@ export function ChatMessages({
         const isImage = msg.content?.startsWith('📷 Image:')
         const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
 
-        // Handle image messages - we need to show the image
         if (isImage && imageUrl) {
           return (
             <div
@@ -65,47 +66,51 @@ export function ChatMessages({
               style={{
                 display: 'flex',
                 justifyContent: isOwn ? 'flex-end' : 'flex-start',
-                marginBottom: '12px'
+                marginBottom: '4px',
               }}
             >
               <div style={{
-                maxWidth: '70%',
-                background: isOwn ? '#667eea' : 'white',
-                color: isOwn ? 'white' : '#1f2937',
-                padding: '10px',
-                borderRadius: '16px',
-                borderBottomRightRadius: isOwn ? '4px' : '16px',
-                borderBottomLeftRadius: isOwn ? '16px' : '4px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                maxWidth: 'min(300px, 70vw)',
+                background: isOwn ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'rgba(255,255,255,0.03)',
+                padding: 'clamp(6px, 1.5vw, 8px)',
+                borderRadius: 'clamp(8px, 2vw, 12px)',
+                borderBottomRightRadius: isOwn ? '4px' : '12px',
+                borderBottomLeftRadius: isOwn ? '12px' : '4px',
+                border: !isOwn ? '1px solid rgba(124,58,237,0.2)' : 'none',
               }}>
-                <div style={{ fontSize: '14px', marginBottom: '4px' }}>
-                  {msg.sender_display_name}
-                </div>
+                {!isOwn && (
+                  <div style={{
+                    fontSize: 'clamp(11px, 2.8vw, 12px)',
+                    color: '#7c3aed',
+                    marginBottom: '4px',
+                  }}>
+                    {msg.sender_display_name}
+                  </div>
+                )}
                 <img
                   src={imageUrl}
                   alt="Shared"
                   style={{
-                    maxWidth: '200px',
-                    maxHeight: '200px',
+                    maxWidth: '100%',
+                    maxHeight: 'min(200px, 50vh)',
                     borderRadius: '8px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                   }}
                   onClick={() => onImageClick(imageUrl)}
                 />
                 <div style={{
-                  fontSize: '10px',
+                  fontSize: 'clamp(9px, 2.2vw, 10px)',
                   marginTop: '4px',
                   textAlign: 'right',
-                  color: isOwn ? 'rgba(255,255,255,0.7)' : '#9ca3af'
+                  color: isOwn ? 'rgba(255,255,255,0.7)' : '#60607a',
                 }}>
-                  {new Date(msg.created_at).toLocaleTimeString()}
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
           )
         }
 
-        // Regular text message
         return (
           <ChatMessage
             key={msg.id}
@@ -124,20 +129,25 @@ export function ChatMessages({
           display: 'flex',
           justifyContent: 'center',
           width: '100%',
-          margin: '16px 0'
+          margin: '16px 0',
         }}>
           <div style={{
-            background: '#f3f4f6',
+            background: 'rgba(124,58,237,0.1)',
             borderRadius: '20px',
-            padding: '12px 24px',
+            padding: 'clamp(8px, 2vw, 12px) clamp(16px, 4vw, 24px)',
             textAlign: 'center',
-            border: '1px dashed #9ca3af'
+            border: '1px dashed rgba(124,58,237,0.3)',
+            backdropFilter: 'blur(4px)',
           }}>
-            <p style={{ color: '#6b7280', margin: 0 }}>
+            <p style={{ color: '#a0a0b0', margin: 0, fontSize: 'clamp(13px, 3.2vw, 14px)' }}>
               👋 {partnerName} left the chat
             </p>
             {leftAt && (
-              <p style={{ fontSize: '11px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+              <p style={{
+                fontSize: 'clamp(10px, 2.5vw, 11px)',
+                color: '#60607a',
+                margin: '4px 0 0 0',
+              }}>
                 Left at {new Date(leftAt).toLocaleTimeString()}
               </p>
             )}
