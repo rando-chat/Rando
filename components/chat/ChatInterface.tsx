@@ -156,13 +156,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         )}
       </div>
 
-      {/* Input Area - REMOVED onImageUpload */}
+      {/* Input Area - REMOVED onImageUpload AND disabled */}
       {!chat.partnerLeft && (
         <ChatInput
           onSendMessage={chat.sendMessage}
           onTyping={() => chat.sendTyping(true)}
           isSending={chat.isSending}
-          disabled={chat.partnerLeft}
         />
       )}
 
