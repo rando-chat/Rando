@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'  // ✅ ADD THIS IMPORT
+import { supabase } from '@/lib/supabase/client'
 
 interface DebugLoggerProps {
   sessionId: string
@@ -13,7 +13,6 @@ interface DebugLoggerProps {
 
 export function DebugLogger({ sessionId, guestSession, messages, partnerName, myName }: DebugLoggerProps) {
   const [logs, setLogs] = useState<string[]>([])
-  const [showLogs, setShowLogs] = useState(false)
 
   // Auto-log important events
   useEffect(() => {
@@ -66,7 +65,6 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
     addLog(`  - content: ${lastMsg.content}`)
     addLog(`  - time: ${new Date(lastMsg.created_at).toLocaleTimeString()}`)
     
-    // Check if it's an image
     if (lastMsg.content.startsWith('📷 Image:')) {
       addLog(`  - 📷 IMAGE DETECTED`)
       const url = lastMsg.content.replace('📷 Image: ', '')
@@ -74,30 +72,7 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
     }
   }
 
-  if (!showLogs) {
-    return (
-      <button
-        onClick={() => setShowLogs(true)}
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          background: '#7c3aed',
-          color: 'white',
-          border: 'none',
-          borderRadius: '30px',
-          padding: '10px 20px',
-          cursor: 'pointer',
-          zIndex: 9999,
-          fontSize: '14px',
-          boxShadow: '0 4px 12px rgba(124,58,237,0.4)'
-        }}
-      >
-        🐞 Show Debug
-      </button>
-    )
-  }
-
+  // ALWAYS VISIBLE - no toggle
   return (
     <div style={{
       position: 'fixed',
@@ -109,11 +84,12 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
       border: '2px solid #7c3aed',
       borderRadius: '12px',
       padding: '16px',
-      zIndex: 9999,
+      zIndex: 99999, // Super high z-index
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+      boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+      pointerEvents: 'auto', // Ensure it's clickable
     }}>
       <div style={{
         display: 'flex',
@@ -126,7 +102,7 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
         <h3 style={{ color: '#7c3aed', margin: 0 }}>🐞 DEBUG LOGGER</h3>
         <div>
           <button
-            onClick={() => setShowLogs(false)}
+            onClick={() => setLogs([])}
             style={{
               background: 'transparent',
               border: '1px solid #333',
@@ -134,10 +110,9 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
               color: '#fff',
               cursor: 'pointer',
               padding: '4px 8px',
-              marginRight: '8px'
             }}
           >
-            Hide
+            Clear
           </button>
         </div>
       </div>
@@ -146,7 +121,6 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
         <button onClick={checkChannel} style={debugButtonStyle}>Test Connection</button>
         <button onClick={checkSession} style={debugButtonStyle}>Check Session</button>
         <button onClick={checkLastMessage} style={debugButtonStyle}>Last Message</button>
-        <button onClick={() => setLogs([])} style={debugButtonStyle}>Clear</button>
       </div>
 
       <div style={{
@@ -159,17 +133,11 @@ export function DebugLogger({ sessionId, guestSession, messages, partnerName, my
         fontSize: '11px',
         fontFamily: 'monospace'
       }}>
-        {logs.length === 0 ? (
-          <div style={{ color: '#666', textAlign: 'center', paddingTop: '140px' }}>
-            No logs yet. Click buttons to test.
+        {logs.map((log, i) => (
+          <div key={i} style={{ marginBottom: '4px', borderBottom: '1px solid #222', paddingBottom: '4px' }}>
+            {log}
           </div>
-        ) : (
-          logs.map((log, i) => (
-            <div key={i} style={{ marginBottom: '4px', borderBottom: '1px solid #222', paddingBottom: '4px' }}>
-              {log}
-            </div>
-          ))
-        )}
+        ))}
       </div>
     </div>
   )
