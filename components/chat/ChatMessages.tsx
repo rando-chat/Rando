@@ -9,7 +9,7 @@ interface ChatMessagesProps {
   currentUserName?: string
   partnerLeft: boolean
   partnerName: string
-  leftAt: string | null
+  leftAt?: string | null
   onImageClick: (url: string) => void
   messagesEndRef: React.RefObject<HTMLDivElement>
 }
@@ -53,20 +53,68 @@ export function ChatMessages({
           return <ChatSystemMessage key={msg.id} message={msg.content} />
         }
 
-        const isMe = msg.sender_id === currentUserId
+        const isOwn = msg.sender_id === currentUserId
         const isImage = msg.content?.startsWith('📷 Image:')
         const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
 
+        // Handle image messages - we need to show the image
+        if (isImage && imageUrl) {
+          return (
+            <div
+              key={msg.id}
+              style={{
+                display: 'flex',
+                justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                marginBottom: '12px'
+              }}
+            >
+              <div style={{
+                maxWidth: '70%',
+                background: isOwn ? '#667eea' : 'white',
+                color: isOwn ? 'white' : '#1f2937',
+                padding: '10px',
+                borderRadius: '16px',
+                borderBottomRightRadius: isOwn ? '4px' : '16px',
+                borderBottomLeftRadius: isOwn ? '16px' : '4px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ fontSize: '14px', marginBottom: '4px' }}>
+                  {msg.sender_display_name}
+                </div>
+                <img
+                  src={imageUrl}
+                  alt="Shared"
+                  style={{
+                    maxWidth: '200px',
+                    maxHeight: '200px',
+                    borderRadius: '8px',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => onImageClick(imageUrl)}
+                />
+                <div style={{
+                  fontSize: '10px',
+                  marginTop: '4px',
+                  textAlign: 'right',
+                  color: isOwn ? 'rgba(255,255,255,0.7)' : '#9ca3af'
+                }}>
+                  {new Date(msg.created_at).toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        // Regular text message
         return (
           <ChatMessage
             key={msg.id}
+            id={msg.id}
             content={msg.content}
-            senderName={msg.sender_display_name}
-            isMe={isMe}
-            isImage={isImage}
-            imageUrl={imageUrl}
+            sender={msg.sender_display_name}
             timestamp={msg.created_at}
-            onImageClick={() => imageUrl && onImageClick(imageUrl)}
+            isOwn={isOwn}
+            status={msg.read_by_recipient ? 'read' : 'delivered'}
           />
         )
       })}
@@ -96,7 +144,7 @@ export function ChatMessages({
           </div>
         </div>
       )}
-      
+
       <div ref={messagesEndRef} />
     </div>
   )
