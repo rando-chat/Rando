@@ -90,7 +90,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const handleAddFriend = async () => {
     await chat.addFriend()
-    // Show success message
     setShowSafetyWarning(true)
     setTimeout(() => setShowSafetyWarning(false), 3000)
   }
@@ -115,7 +114,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         width: '100%',
       }}
     >
-      {/* Background orbs - same as landing */}
+      {/* Background orbs */}
       <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
         <div style={{
           position: 'absolute', top: '10%', left: '15%',
@@ -181,7 +180,10 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {!chat.partnerLeft && (
         <ChatInput
           sessionId={sessionId}
-          onSendMessage={chat.sendMessage}
+          // Wrap sendMessage to ignore return value
+          onSendMessage={async (content) => {
+            await chat.sendMessage(content)
+          }}
           onTyping={() => chat.sendTyping(true)}
           isSending={chat.isSending}
           onEditImage={setEditImage}
@@ -197,7 +199,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         />
       )}
 
-      {/* Sidebar - UPDATED with guestId */}
+      {/* Sidebar */}
       <ChatSidebar
         isOpen={showSidebar}
         onClose={() => setShowSidebar(false)}
