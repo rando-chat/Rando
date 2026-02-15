@@ -1,100 +1,107 @@
 'use client'
-import { useEffect, useState } from 'react'
 
 interface QueueStatusProps {
-  position: number
-  estimatedWait: number
+  isInQueue: boolean
+  onJoin: () => void
   onLeave: () => void
+  estimatedWait?: number
+  queuePosition?: number
 }
 
-export function QueueStatus({ position, estimatedWait, onLeave }: QueueStatusProps) {
-  const [dots, setDots] = useState('.')
-  const [elapsed, setElapsed] = useState(0)
-
-  useEffect(() => {
-    const dotsInterval = setInterval(() => {
-      setDots(d => d.length >= 3 ? '.' : d + '.')
-    }, 500)
-    const timeInterval = setInterval(() => {
-      setElapsed(e => e + 1)
-    }, 1000)
-    return () => { clearInterval(dotsInterval); clearInterval(timeInterval) }
-  }, [])
-
-  return (
-    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-      {/* Animated pulse rings */}
-      <div style={{ position: 'relative', width: 120, height: 120, margin: '0 auto 32px' }}>
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: '50%',
-          border: '2px solid rgba(124,58,237,0.3)',
-          animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite',
-        }} />
-        <div style={{
-          position: 'absolute', inset: 10, borderRadius: '50%',
-          border: '2px solid rgba(124,58,237,0.5)',
-          animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite 0.3s',
-        }} />
-        <div style={{
-          position: 'absolute', inset: 20, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 28,
-        }}>
-          🔍
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes ping {
-          75%, 100% { transform: scale(1.5); opacity: 0; }
-        }
-      `}</style>
-
-      <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
-        Finding your match{dots}
-      </h2>
-
-      <p style={{ color: '#6b7280', marginBottom: 24 }}>
-        Looking for someone interesting to talk to
-      </p>
-
+export function QueueStatus({
+  isInQueue,
+  onJoin,
+  onLeave,
+  estimatedWait = 30,
+  queuePosition = 1
+}: QueueStatusProps) {
+  if (isInQueue) {
+    return (
       <div style={{
-        display: 'inline-flex', gap: 32, padding: '16px 32px',
-        background: '#f9fafb', borderRadius: 12, marginBottom: 32,
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '12px',
+        padding: '20px',
+        color: 'white',
+        textAlign: 'center'
       }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: '#7c3aed' }}>
-            {elapsed}s
-          </div>
-          <div style={{ fontSize: 12, color: '#9ca3af' }}>Waiting</div>
+        <div style={{
+          fontSize: '14px',
+          opacity: 0.9,
+          marginBottom: '8px'
+        }}>
+          You are in queue
         </div>
-        <div style={{ width: 1, background: '#e5e7eb' }} />
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: '#7c3aed' }}>
-            ~{Math.max(1, estimatedWait - elapsed)}s
-          </div>
-          <div style={{ fontSize: 12, color: '#9ca3af' }}>Est. remaining</div>
+        
+        <div style={{
+          fontSize: '32px',
+          fontWeight: 'bold',
+          marginBottom: '4px'
+        }}>
+          #{queuePosition}
         </div>
-      </div>
-
-      <div>
+        
+        <div style={{
+          fontSize: '14px',
+          opacity: 0.9,
+          marginBottom: '16px'
+        }}>
+          Est. wait: {estimatedWait}s
+        </div>
+        
         <button
           onClick={onLeave}
           style={{
-            padding: '12px 32px',
-            background: 'transparent',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            color: '#6b7280',
+            padding: '10px 20px',
+            background: 'rgba(255,255,255,0.2)',
+            color: 'white',
+            border: '2px solid white',
+            borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: 14,
-            transition: 'all 0.2s',
+            fontSize: '14px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
         >
-          Cancel
+          Leave Queue
         </button>
       </div>
+    )
+  }
+
+  return (
+    <div style={{
+      background: 'white',
+      borderRadius: '12px',
+      padding: '20px',
+      textAlign: 'center',
+      border: '2px dashed #e5e7eb'
+    }}>
+      <div style={{
+        fontSize: '16px',
+        color: '#6b7280',
+        marginBottom: '16px'
+      }}>
+        Not in queue
+      </div>
+      
+      <button
+        onClick={onJoin}
+        style={{
+          padding: '12px 24px',
+          background: '#667eea',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '16px',
+          fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(102,126,234,0.4)'
+        }}
+      >
+        Join Queue
+      </button>
     </div>
   )
 }
