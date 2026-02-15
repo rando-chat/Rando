@@ -25,7 +25,7 @@ export function ChatSidebar({
 
   return (
     <div style={{
-      position: 'fixed',
+      position: 'fixed' as const,
       top: 0,
       right: 0,
       bottom: 0,
@@ -34,7 +34,7 @@ export function ChatSidebar({
       borderLeft: '1px solid rgba(124,58,237,0.2)',
       zIndex: 100,
       padding: '24px 16px',
-      overflowY: 'auto',
+      overflowY: 'auto' as const,
       animation: 'slideIn 0.3s ease',
       boxShadow: '-5px 0 30px rgba(0,0,0,0.5)',
     }}>
@@ -49,6 +49,7 @@ export function ChatSidebar({
           fontWeight: 600,
           color: '#f0f0f0',
           fontFamily: "'Georgia', serif",
+          margin: 0,
         }}>
           Chat Info
         </h3>
@@ -63,6 +64,9 @@ export function ChatSidebar({
             cursor: 'pointer',
             color: '#a0a0b0',
             fontSize: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
           ✕
@@ -75,7 +79,7 @@ export function ChatSidebar({
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px',
-        textAlign: 'center',
+        textAlign: 'center' as const,
       }}>
         <div style={{
           width: '60px',
@@ -96,6 +100,7 @@ export function ChatSidebar({
           color: '#f0f0f0',
           marginBottom: '4px',
           fontFamily: "'Georgia', serif",
+          margin: 0,
         }}>
           {partnerName}
         </h4>
@@ -112,20 +117,20 @@ export function ChatSidebar({
           background: 'rgba(255,255,255,0.03)',
           borderRadius: '12px',
           padding: '16px',
-          textAlign: 'center',
+          textAlign: 'center' as const,
         }}>
           <div style={{ fontSize: '24px', color: '#7c3aed', marginBottom: '4px' }}>⏱️</div>
-          <div style={{ fontSize: '12px', color: '#60607a' }}>Duration</div>
+          <div style={{ fontSize: '12px', color: '#60607a', marginBottom: '4px' }}>Duration</div>
           <div style={{ fontSize: '16px', color: '#f0f0f0' }}>{chatDuration}</div>
         </div>
         <div style={{
           background: 'rgba(255,255,255,0.03)',
           borderRadius: '12px',
           padding: '16px',
-          textAlign: 'center',
+          textAlign: 'center' as const,
         }}>
           <div style={{ fontSize: '24px', color: '#7c3aed', marginBottom: '4px' }}>💬</div>
-          <div style={{ fontSize: '12px', color: '#60607a' }}>Messages</div>
+          <div style={{ fontSize: '12px', color: '#60607a', marginBottom: '4px' }}>Messages</div>
           <div style={{ fontSize: '16px', color: '#f0f0f0' }}>{messageCount}</div>
         </div>
       </div>
@@ -134,19 +139,52 @@ export function ChatSidebar({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button
           onClick={onAddFriend}
-          style={actionButtonStyle}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: 'transparent',
+            border: '1px solid rgba(124,58,237,0.2)',
+            borderRadius: '10px',
+            color: '#f0f0f0',
+            fontSize: '15px',
+            textAlign: 'left' as const,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
         >
           ➕ Add Friend
         </button>
         <button
           onClick={onReport}
-          style={actionButtonStyle}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: 'transparent',
+            border: '1px solid rgba(124,58,237,0.2)',
+            borderRadius: '10px',
+            color: '#f0f0f0',
+            fontSize: '15px',
+            textAlign: 'left' as const,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
         >
           ⚠️ Report User
         </button>
         <button
           onClick={onBlock}
-          style={{...actionButtonStyle, color: '#ef4444'}}
+          style={{
+            width: '100%',
+            padding: '14px',
+            background: 'transparent',
+            border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: '10px',
+            color: '#ef4444',
+            fontSize: '15px',
+            textAlign: 'left' as const,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
         >
           🚫 Block User
         </button>
@@ -160,17 +198,4 @@ export function ChatSidebar({
       `}</style>
     </div>
   )
-}
-
-const actionButtonStyle = {
-  width: '100%',
-  padding: '14px',
-  background: 'transparent',
-  border: '1px solid rgba(124,58,237,0.2)',
-  borderRadius: '10px',
-  color: '#f0f0f0',
-  fontSize: '15px',
-  textAlign: 'left',
-  cursor: 'pointer',
-  transition: 'all 0.2s ease',
 }
