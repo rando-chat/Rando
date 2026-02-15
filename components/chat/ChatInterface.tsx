@@ -144,7 +144,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           partnerName={chat.partnerName}
           onImageClick={setSelectedImage}
           messagesEndRef={chat.messagesEndRef}
-          leftAt={leftAt} // ✅ ADD THIS LINE
+          leftAt={leftAt}
         />
 
         {/* Typing Indicator */}
@@ -156,11 +156,12 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         )}
       </div>
 
-      {/* Input Area */}
+      {/* Input Area - FIXED TYPING PROPS */}
       {!chat.partnerLeft && (
         <ChatInput
           onSendMessage={chat.sendMessage}
-          onTyping={chat.sendTyping}
+          onTypingStart={() => chat.sendTyping(true)}
+          onTypingStop={() => chat.sendTyping(false)}
           isSending={chat.isSending}
           onImageUpload={handleImageUpload}
           disabled={chat.partnerLeft}
