@@ -31,14 +31,16 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Debug logging
+  // Debug logging to console
   useEffect(() => {
-    console.log('🔍 ChatInterface mounted with sessionId:', sessionId)
-    console.log('🔍 Guest session:', chat.guestSession)
-    console.log('🔍 Partner name:', chat.partnerName)
-    console.log('🔍 My name:', chat.myName)
-    console.log('🔍 Messages count:', chat.messages.length)
-  }, [sessionId, chat.guestSession, chat.partnerName, chat.myName, chat.messages])
+    console.log('🔍 ========== CHAT INTERFACE MOUNTED ==========')
+    console.log('🔍 sessionId:', sessionId)
+    console.log('🔍 guestSession:', chat.guestSession)
+    console.log('🔍 myName:', chat.myName)
+    console.log('🔍 partnerName:', chat.partnerName)
+    console.log('🔍 messages count:', chat.messages.length)
+    console.log('🔍 ==========================================')
+  }, [sessionId, chat.guestSession, chat.myName, chat.partnerName, chat.messages])
 
   // Log when messages update
   useEffect(() => {
@@ -131,6 +133,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       return
     }
     console.log('📷 Starting image upload:', file.name)
+    console.log('📷 File type:', file.type)
+    console.log('📷 File size:', file.size)
+    
     const result = await chat.uploadImage(file)
     if (result) {
       console.log('✅ Image uploaded successfully:', result)
@@ -294,16 +299,32 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         }}
       />
 
-      {/* Debug Logger - Only in development */}
-      {process.env.NODE_ENV === 'development' && (
-        <DebugLogger
-          sessionId={sessionId}
-          guestSession={chat.guestSession}
-          messages={chat.messages}
-          partnerName={chat.partnerName}
-          myName={chat.myName || ''}
-        />
-      )}
+      {/* DEBUG VISUAL INDICATOR - ALWAYS VISIBLE */}
+      <div style={{
+        position: 'fixed',
+        top: '10px',
+        left: '10px',
+        background: '#7c3aed',
+        color: 'white',
+        padding: '8px 16px',
+        borderRadius: '20px',
+        zIndex: 100000,
+        fontSize: '14px',
+        fontWeight: 'bold',
+        boxShadow: '0 4px 12px rgba(124,58,237,0.4)',
+        pointerEvents: 'none'
+      }}>
+        🐞 DEBUG MODE ACTIVE
+      </div>
+
+      {/* Debug Logger - ALWAYS VISIBLE */}
+      <DebugLogger
+        sessionId={sessionId}
+        guestSession={chat.guestSession}
+        messages={chat.messages}
+        partnerName={chat.partnerName}
+        myName={chat.myName || ''}
+      />
     </div>
   )
 }
