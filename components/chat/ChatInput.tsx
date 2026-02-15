@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { EmojiPicker } from './EmojiPicker'
 
 interface ChatInputProps {
   onSendMessage: (content: string) => Promise<void>
@@ -22,8 +23,6 @@ export function ChatInput({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const emojis = ['😊', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💯', '😢', '😡', '🥰', '🤔']
 
   const handleSend = async () => {
     if (!messageInput.trim() || isSending) return
@@ -56,44 +55,11 @@ export function ChatInput({
       borderTop: '1px solid #e5e7eb', 
       position: 'relative'
     }}>
-      {/* Emoji picker */}
       {showEmojiPicker && (
-        <div style={{ 
-          position: 'absolute', 
-          bottom: '100%', 
-          left: '16px', 
-          background: 'white', 
-          borderRadius: '12px', 
-          padding: '12px', 
-          boxShadow: '0 -4px 12px rgba(0,0,0,0.1)', 
-          border: '1px solid #e5e7eb', 
-          marginBottom: '8px', 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(6, 1fr)', 
-          gap: '8px',
-          zIndex: 10
-        }}>
-          {emojis.map(emoji => (
-            <button 
-              key={emoji} 
-              onClick={() => { 
-                setMessageInput(prev => prev + emoji)
-                setShowEmojiPicker(false)
-              }} 
-              style={{ 
-                width: '40px', 
-                height: '40px', 
-                fontSize: '20px', 
-                border: 'none', 
-                background: '#f3f4f6', 
-                borderRadius: '8px', 
-                cursor: 'pointer'
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
+        <EmojiPicker
+          onSelect={(emoji) => setMessageInput(prev => prev + emoji)}
+          onClose={() => setShowEmojiPicker(false)}
+        />
       )}
 
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -105,7 +71,8 @@ export function ChatInput({
             border: 'none', 
             borderRadius: '8px', 
             cursor: 'pointer', 
-            fontSize: '20px'
+            fontSize: '20px',
+            position: 'relative'
           }}
         >
           😊
