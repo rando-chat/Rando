@@ -90,11 +90,14 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const handleAddFriend = async () => {
     await chat.addFriend()
+    // Show success message
+    setShowSafetyWarning(true)
+    setTimeout(() => setShowSafetyWarning(false), 3000)
   }
 
   const handleImageUpload = async (file: File) => {
     if (!chat.guestSession || !sessionId) return
-    await chat.uploadImage(file) // FIXED: removed sessionId argument
+    await chat.uploadImage(file)
   }
 
   return (
@@ -188,13 +191,13 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       {/* Safety Warning */}
       {showSafetyWarning && (
         <SafetyWarning
-          message="Report submitted to moderators"
+          message="Friend request sent!"
           type="success"
           onClose={() => setShowSafetyWarning(false)}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - UPDATED with guestId */}
       <ChatSidebar
         isOpen={showSidebar}
         onClose={() => setShowSidebar(false)}
@@ -207,6 +210,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         }}
         onBlock={handleBlock}
         onAddFriend={handleAddFriend}
+        guestId={chat.guestSession?.guest_id}
       />
 
       {/* Modals */}
