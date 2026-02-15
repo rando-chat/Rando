@@ -13,7 +13,9 @@ export function MatchmakingPage() {
     matchFound, 
     joinQueue, 
     leaveQueue, 
-    isLoading 
+    isLoading,
+    queuePosition,
+    usersInQueue
   } = useMatchmaking()
 
   if (!session) {
@@ -54,7 +56,7 @@ export function MatchmakingPage() {
         maxWidth: '500px',
         width: '100%'
       }}>
-        {/* Queue Status - Like debug's join/leave */}
+        {/* Queue Status */}
         <QueueStatus
           isInQueue={isInQueue}
           onJoin={joinQueue}
@@ -63,18 +65,18 @@ export function MatchmakingPage() {
           displayName={session.display_name}
         />
 
-        {/* Queue Animation - Shows when in queue */}
+        {/* Queue Animation with REAL stats */}
         {isInQueue && (
           <div style={{ marginTop: '20px' }}>
             <MatchmakingQueue
               estimatedWait={estimatedWait}
-              queuePosition={1}
-              usersInQueue={2} // You'd get this from your hook
+              queuePosition={queuePosition}
+              usersInQueue={usersInQueue}
             />
           </div>
         )}
 
-        {/* Match Found Modal - Like debug */}
+        {/* Match Found Modal */}
         {matchFound && (
           <MatchFound
             match={{
