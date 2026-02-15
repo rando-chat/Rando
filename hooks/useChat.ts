@@ -211,7 +211,7 @@ export function useChat(sessionId: string) {
           sender_display_name: guestSession.display_name,
           content: content,
           content_hash: contentHash,
-          is_safe: true, // Will be updated by DB trigger
+          is_safe: true,
           delivered: true,
           created_at: new Date().toISOString()
         })
@@ -256,7 +256,6 @@ export function useChat(sessionId: string) {
 
       setPartnerLeft(true)
 
-      // Clean up channel
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
@@ -268,7 +267,7 @@ export function useChat(sessionId: string) {
   }
 
   // Upload image
-  const uploadImage = async (file: File): Promise<string | null> => {
+  const uploadImage = async (file: File) => {
     if (!sessionId || !guestSession) return null
 
     try {
@@ -308,18 +307,44 @@ export function useChat(sessionId: string) {
     }
   }
 
+  // Add friend
+  const addFriend = async () => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      // Find partner ID
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
+
+      const { error } = await supabase
+        .from('friends')
+        .insert({
+          user_id: guestSession.guest_id,
+          friend_id: partnerMsg.sender_id,
+          is_guest: true,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
   // Report user
   const reportUser = async (reason: string, category: string) => {
     if (!guestSession || !sessionId) return
 
     try {
-      const reportedUserId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
-      if (!reportedUserId) throw new Error('No partner found')
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
 
       const { error } = await supabase.rpc('handle_user_report', {
         p_reporter_id: guestSession.guest_id,
         p_reporter_is_guest: true,
-        p_reported_user_id: reportedUserId,
+        p_reported_user_id: partnerMsg.sender_id,
         p_reported_user_is_guest: true,
         p_session_id: sessionId,
         p_reason: reason,
@@ -339,49 +364,21 @@ export function useChat(sessionId: string) {
     if (!guestSession || !sessionId) return
 
     try {
-      const blockedUserId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
-      if (!blockedUserId) throw new Error('No partner found')
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
 
-      // Insert into blocked_users table
       const { error } = await supabase
         .from('blocked_users')
         .insert({
           user_id: guestSession.guest_id,
-          blocked_user_id: blockedUserId,
+          blocked_user_id: partnerMsg.sender_id,
           is_guest: true,
           blocked_at: new Date().toISOString()
         })
 
       if (error) throw error
 
-      // End the chat
       await endChat()
-
-    } catch (err: any) {
-      setError(err.message)
-    }
-  }
-
-  // Add friend
-  const addFriend = async () => {
-    if (!guestSession || !sessionId) return
-
-    try {
-      const friendId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
-      if (!friendId) throw new Error('No partner found')
-
-      // Insert into friends table
-      const { error } = await supabase
-        .from('friends')
-        .insert({
-          user_id: guestSession.guest_id,
-          friend_id: friendId,
-          is_guest: true,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        })
-
-      if (error) throw error
 
     } catch (err: any) {
       setError(err.message)
@@ -407,9 +404,9 @@ export function useChat(sessionId: string) {
     sendTyping,
     endChat,
     uploadImage,
+    addFriend,
     reportUser,
     blockUser,
-    addFriend,
     scrollToBottom
   }
 }
