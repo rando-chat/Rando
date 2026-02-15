@@ -1,99 +1,200 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useChat } from '@/hooks/useChat'
 import { ChatHeader } from './ChatHeader'
-import { MessageBubble } from './MessageBubble'
-import { MessageInput } from './MessageInput'
+import { ChatMessages } from './ChatMessages'
+import { ChatInput } from './ChatInput'
+import { ChatSidebar } from './ChatSidebar'
+import { ChatModals } from './ChatModals'
+import { TypingIndicator } from './TypingIndicator'
+import { SafetyWarning } from './SafetyWarning'
 
 interface ChatInterfaceProps {
   sessionId: string
 }
 
-export function ChatInterface({ sessionId }: ChatInterfaceProps) {
+export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
   const router = useRouter()
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chat = useChat(sessionId)
   
-  const {
-    session,
-    guestSession,
-    messages,
-    isLoading,
-    error,
-    sendMessage,
-    endChat,
-    isSending,
-  } = useChat(sessionId)
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [showReport, setShowReport] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [editImage, setEditImage] = useState<string | null>(null)
+  const [showSafetyWarning, setShowSafetyWarning] = useState(false)
+  const [chatDuration, setChatDuration] = useState('0m')
+  const [messageCount, setMessageCount] = useState(0)
+  
+  const containerRef = useRef<HTMLDivElement>(null)
 
+  // Update stats
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (chat.messages.length > 0) {
+      setMessageCount(chat.messages.length)
+      
+      const firstMsg = new Date(chat.messages[0].created_at)
+      const now = new Date()
+      const diff = Math.floor((now.getTime() - firstMsg.getTime()) / 60000)
+      setChatDuration(`${diff}m`)
+    }
+  }, [chat.messages])
 
-  const handleSendMessage = async (content: string) => {
-    await sendMessage(content)
-  }
+  // Handle escape key to close modals
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSidebar(false)
+        setShowReport(false)
+        setSelectedImage(null)
+        setEditImage(null)
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
 
   const handleEndChat = async () => {
-    await endChat()
+    await chat.endChat()
     router.push('/matchmaking')
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-      </div>
-    )
+  const handleReport = async (reason: string) => {
+    // Implement report logic here
+    console.log('Report submitted:', reason)
+    setShowReport(false)
+    // Show success message
+    setShowSafetyWarning(true)
+    setTimeout(() => setShowSafetyWarning(false), 3000)
   }
 
-  if (error || !session || !guestSession) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Failed to load chat session</p>
-          <button
-            onClick={() => router.push('/matchmaking')}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg"
-          >
-            Return to Matchmaking
-          </button>
-        </div>
-      </div>
-    )
+  const handleBlock = async () => {
+    if (confirm('Block this user? They will not be able to match with you again.')) {
+      // Implement block logic here
+      console.log('User blocked')
+      await handleEndChat()
+    }
+  }
+
+  const handleAddFriend = async () => {
+    // Implement add friend logic here
+    console.log('Friend request sent')
+  }
+
+  const handleImageUpload = async (file: File) => {
+    // Implement image upload logic here
+    // This should upload to Supabase Storage and send message with URL
+    console.log('Uploading image:', file.name)
+    
+    // Simulate upload
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    
+    // Send message with image URL (you'd get the actual URL from storage)
+    await chat.sendMessage(`📷 Image: [Uploaded: ${file.name}]`)
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-b from-gray-50 to-white">
-      <ChatHeader 
-        session={session}
-        guestSession={guestSession}
+    <div 
+      ref={containerRef}
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100vh', 
+        background: '#f9fafb',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        width: '100%',
+        position: 'relative'
+      }}
+    >
+      {/* Header */}
+      <ChatHeader
+        partnerName={chat.partnerName}
+        isOnline={true}
+        isTyping={chat.isTyping}
+        partnerLeft={chat.partnerLeft}
+        onOpenSidebar={() => setShowSidebar(true)}
+        onReport={() => setShowReport(true)}
         onEndChat={handleEndChat}
       />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-400 mt-20">
-            <p>No messages yet</p>
-            <p className="text-sm">Say hi to start the conversation!</p>
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              isOwn={msg.sender_id === guestSession.guest_id}
-            />
-          ))
+      {/* Main Chat Area */}
+      <div style={{ 
+        position: 'relative', 
+        flex: 1, 
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Messages */}
+        <ChatMessages
+          messages={chat.messages}
+          currentUserId={chat.guestSession?.guest_id}
+          currentUserName={chat.guestSession?.display_name}
+          partnerLeft={chat.partnerLeft}
+          partnerName={chat.partnerName}
+          onImageClick={setSelectedImage}
+          messagesEndRef={chat.messagesEndRef}
+        />
+
+        {/* Typing Indicator */}
+        {chat.isTyping && !chat.partnerLeft && (
+          <TypingIndicator 
+            names={[chat.partnerName]} 
+            isVisible={true} 
+          />
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      <MessageInput
-        onSendMessage={handleSendMessage}
-        isSending={isSending}
-        sessionId={sessionId}
-        guestSession={guestSession}
+      {/* Input Area */}
+      {!chat.partnerLeft && (
+        <ChatInput
+          onSendMessage={chat.sendMessage}
+          onTyping={chat.sendTyping}
+          isSending={chat.isSending}
+          onImageUpload={handleImageUpload}
+          disabled={chat.partnerLeft}
+        />
+      )}
+
+      {/* Safety Warning Toast */}
+      {showSafetyWarning && (
+        <SafetyWarning
+          message="Report submitted to moderators"
+          type="success"
+          onClose={() => setShowSafetyWarning(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <ChatSidebar
+        isOpen={showSidebar}
+        onClose={() => setShowSidebar(false)}
+        partnerName={chat.partnerName}
+        chatDuration={chatDuration}
+        messageCount={messageCount}
+        onReport={() => {
+          setShowSidebar(false)
+          setShowReport(true)
+        }}
+        onBlock={handleBlock}
+        onAddFriend={handleAddFriend}
+      />
+
+      {/* Modals */}
+      <ChatModals
+        showReport={showReport}
+        onCloseReport={() => setShowReport(false)}
+        onSubmitReport={handleReport}
+        selectedImage={selectedImage}
+        onCloseImage={() => setSelectedImage(null)}
+        editImage={editImage}
+        onCloseEdit={() => setEditImage(null)}
+        onSendEdit={(file) => {
+          handleImageUpload(file)
+          setEditImage(null)
+        }}
       />
     </div>
   )
