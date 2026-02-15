@@ -51,6 +51,25 @@ export function useMatchmaking() {
     if (!session) return
 
     try {
+      // 🔥 FIX: Check if user already in an active chat (prevents duplicates)
+      const { data: existingChat } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .or(`user1_id.eq.${session.guest_id},user2_id.eq.${session.guest_id}`)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      if (existingChat) {
+        console.log('⚠️ Already in chat, redirecting...');
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setMatchFound(existingChat);
+        setIsInQueue(false);
+        return;
+      }
+
       // Check for existing session
       const { data: existingSession } = await supabase
         .from('chat_sessions')
@@ -138,7 +157,7 @@ export function useMatchmaking() {
 
     setIsLoading(true)
     setError(null)
-    
+
     try {
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
