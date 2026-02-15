@@ -11,12 +11,13 @@ export function useChat(sessionId: string) {
   const [partnerLeft, setPartnerLeft] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   
   const channelRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Load guest session (same as debug)
+  // Load guest session
   useEffect(() => {
     const loadGuestSession = async () => {
       const { data } = await supabase.rpc('create_guest_session')
@@ -28,7 +29,7 @@ export function useChat(sessionId: string) {
     loadGuestSession()
   }, [])
 
-  // Load messages and setup subscription (SAME AS DEBUG)
+  // Load messages and setup subscription
   useEffect(() => {
     if (!sessionId || !guestSession) return
 
@@ -49,7 +50,7 @@ export function useChat(sessionId: string) {
         }
       }
 
-      // Load messages (SAME AS DEBUG)
+      // Load messages
       const { data } = await supabase
         .from('messages')
         .select('*')
@@ -58,7 +59,7 @@ export function useChat(sessionId: string) {
 
       if (data) setMessages(data)
 
-      // Setup subscription (SAME AS DEBUG)
+      // Setup subscription
       setupSubscription()
     }
 
@@ -74,7 +75,6 @@ export function useChat(sessionId: string) {
   const setupSubscription = () => {
     if (channelRef.current || !guestSession) return
 
-    // EXACT same channel setup as debug
     const channel = supabase.channel(`chat-${sessionId}-${Date.now()}`, {
       config: {
         broadcast: { self: true },
@@ -98,12 +98,25 @@ export function useChat(sessionId: string) {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 100)
       })
-      .subscribe()
+
+    // Listen for typing
+    channel
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.userId !== guestSession?.guest_id) {
+          setIsTyping(payload.isTyping)
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+          if (payload.isTyping) {
+            typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000)
+          }
+        }
+      })
+
+    channel.subscribe()
   }
 
-  // Send message (SAME AS DEBUG)
+  // Send message
   const sendMessage = async (content: string) => {
-    if (!content.trim() || !sessionId || !guestSession) return
+    if (!content.trim() || !sessionId || !guestSession || partnerLeft) return
 
     setIsSending(true)
     await supabase.from('messages').insert({
@@ -117,33 +130,38 @@ export function useChat(sessionId: string) {
     setIsSending(false)
   }
 
-  // Upload image (EXACT same as debug)
+  // Send typing
+  const sendTyping = (typing: boolean) => {
+    if (!channelRef.current) return
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { userId: guestSession?.guest_id, isTyping: typing }
+    })
+  }
+
+  // Upload image
   const uploadImage = async (file: File) => {
     if (!sessionId || !guestSession) return null
 
     try {
-      // Same validation as debug
       if (!file.type.startsWith('image/')) throw new Error('Not an image')
       if (file.size > 5 * 1024 * 1024) throw new Error('File too large')
 
-      // Same filename as debug
       const fileExt = file.name.split('.').pop()
       const fileName = `${guestSession.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
       const filePath = `chat-images/${fileName}`
 
-      // Upload (same as debug)
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
-      // Get URL (same as debug)
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath)
 
-      // Send message (same as debug)
       await supabase.from('messages').insert({
         session_id: sessionId,
         sender_id: guestSession.guest_id,
@@ -160,14 +178,77 @@ export function useChat(sessionId: string) {
     }
   }
 
-  // Simple typing (same as debug)
-  const sendTyping = (typing: boolean) => {
-    if (!channelRef.current) return
-    channelRef.current.send({
-      type: 'broadcast',
-      event: 'typing',
-      payload: { userId: guestSession?.guest_id, isTyping: typing }
-    })
+  // ✅ ADD THIS - Report user function
+  const reportUser = async (reason: string, category: string) => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
+
+      const { error } = await supabase.rpc('handle_user_report', {
+        p_reporter_id: guestSession.guest_id,
+        p_reporter_is_guest: true,
+        p_reported_user_id: partnerMsg.sender_id,
+        p_reported_user_is_guest: true,
+        p_session_id: sessionId,
+        p_reason: reason,
+        p_category: category,
+        p_evidence: { messages: messages.map(m => m.id) }
+      })
+
+      if (error) throw error
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // ✅ ADD THIS - Add friend function
+  const addFriend = async () => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
+
+      const { error } = await supabase
+        .from('friends')
+        .insert({
+          user_id: guestSession.guest_id,
+          friend_id: partnerMsg.sender_id,
+          is_guest: true,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // ✅ ADD THIS - Block user function
+  const blockUser = async () => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
+      if (!partnerMsg) throw new Error('No partner found')
+
+      const { error } = await supabase
+        .from('blocked_users')
+        .insert({
+          user_id: guestSession.guest_id,
+          blocked_user_id: partnerMsg.sender_id,
+          is_guest: true,
+          blocked_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+      await endChat()
+    } catch (err: any) {
+      setError(err.message)
+    }
   }
 
   // End chat
@@ -187,10 +268,14 @@ export function useChat(sessionId: string) {
     partnerLeft,
     isTyping,
     isSending,
+    error,
     messagesEndRef,
     sendMessage,
     sendTyping,
     endChat,
-    uploadImage
+    uploadImage,
+    reportUser,    // ✅ NOW INCLUDED
+    addFriend,     // ✅ NOW INCLUDED
+    blockUser      // ✅ NOW INCLUDED
   }
 }
