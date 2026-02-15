@@ -13,20 +13,36 @@ export function useChat(sessionId: string) {
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  
+
   const channelRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Load guest session
+  // Load guest session from localStorage - DON'T create new one
   useEffect(() => {
-    const loadGuestSession = async () => {
-      const { data } = await supabase.rpc('create_guest_session')
-      if (data && data.length > 0) {
-        setGuestSession(data[0])
-        setMyName(data[0].display_name)
+    const loadGuestSession = () => {
+      const storedSession = localStorage.getItem('rando-guest-session')
+      
+      if (storedSession) {
+        const session = JSON.parse(storedSession)
+        setGuestSession(session)
+        setMyName(session.display_name)
+        console.log('📦 Loaded guest from storage:', session)
+      } else {
+        console.error('❌ No guest session found in storage!')
+        // Fallback - create new one (shouldn't happen)
+        const createFallback = async () => {
+          const { data } = await supabase.rpc('create_guest_session')
+          if (data && data.length > 0) {
+            setGuestSession(data[0])
+            setMyName(data[0].display_name)
+            localStorage.setItem('rando-guest-session', JSON.stringify(data[0]))
+          }
+        }
+        createFallback()
       }
     }
+
     loadGuestSession()
   }, [])
 
@@ -45,13 +61,23 @@ export function useChat(sessionId: string) {
         .single()
 
       if (session) {
+        console.log('📊 Chat session data:', session)
+        console.log('👤 Current guest ID:', guestSession.guest_id)
+
         // Set partner name based on who the current user is
         if (session.user1_id === guestSession.guest_id) {
           setPartnerName(session.user2_display_name)
           setMyName(session.user1_display_name)
-        } else {
+          console.log('✅ I am user1, partner is:', session.user2_display_name)
+        } else if (session.user2_id === guestSession.guest_id) {
           setPartnerName(session.user1_display_name)
           setMyName(session.user2_display_name)
+          console.log('✅ I am user2, partner is:', session.user1_display_name)
+        } else {
+          console.error('❌ Guest ID not found in session!')
+          console.log('Session user1:', session.user1_id)
+          console.log('Session user2:', session.user2_id)
+          console.log('Guest ID:', guestSession.guest_id)
         }
       }
 
@@ -101,7 +127,7 @@ export function useChat(sessionId: string) {
       }, (payload) => {
         const msg = payload.new
         setMessages(prev => [...prev, msg])
-        
+
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
         }, 100)
@@ -127,7 +153,7 @@ export function useChat(sessionId: string) {
     if (!content.trim() || !sessionId || !guestSession || partnerLeft) return
 
     setIsSending(true)
-    
+
     const { error } = await supabase.from('messages').insert({
       session_id: sessionId,
       sender_id: guestSession.guest_id,
@@ -140,7 +166,7 @@ export function useChat(sessionId: string) {
     if (error) {
       console.error('Error sending message:', error)
     }
-    
+
     setIsSending(false)
   }
 
@@ -162,7 +188,7 @@ export function useChat(sessionId: string) {
       if (!file.type.startsWith('image/')) {
         throw new Error('Not an image')
       }
-      
+
       if (file.size > 5 * 1024 * 1024) {
         throw new Error('File too large')
       }
@@ -258,7 +284,7 @@ export function useChat(sessionId: string) {
           is_guest: true,
           blocked_at: new Date().toISOString()
         })
-      
+
       await endChat()
     } catch (err) {
       console.error('Block error:', err)
