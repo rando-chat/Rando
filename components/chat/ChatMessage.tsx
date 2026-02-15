@@ -1,78 +1,56 @@
 'use client'
 
-import { MessageStatus } from './MessageStatus'
-
 interface ChatMessageProps {
+  id: string
   content: string
-  senderName: string
-  isMe: boolean
-  isImage: boolean
-  imageUrl: string | null
+  sender: string
   timestamp: string
-  status?: 'sending' | 'sent' | 'delivered' | 'read'
-  onImageClick: () => void
+  isOwn: boolean
+  status?: 'sent' | 'delivered' | 'read'
+  onReact?: (emoji: string) => void
 }
 
 export function ChatMessage({
   content,
-  senderName,
-  isMe,
-  isImage,
-  imageUrl,
+  sender,
   timestamp,
+  isOwn,
   status = 'sent',
-  onImageClick
+  onReact
 }: ChatMessageProps) {
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      alignItems: isMe ? 'flex-end' : 'flex-start',
-      width: '100%'
+    <div style={{
+      display: 'flex',
+      justifyContent: isOwn ? 'flex-end' : 'flex-start',
+      marginBottom: '12px'
     }}>
-      <div style={{ maxWidth: '70%' }}>
-        <div style={{ 
-          fontSize: '12px', 
-          color: '#6b7280', 
-          marginBottom: '4px', 
-          textAlign: isMe ? 'right' : 'left' 
+      <div style={{
+        maxWidth: '70%',
+        background: isOwn ? '#667eea' : 'white',
+        color: isOwn ? 'white' : '#1f2937',
+        padding: '10px 14px',
+        borderRadius: '16px',
+        borderBottomRightRadius: isOwn ? '4px' : '16px',
+        borderBottomLeftRadius: isOwn ? '16px' : '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ fontSize: '14px', marginBottom: '4px' }}>
+          {sender}
+        </div>
+        <div style={{ fontSize: '15px' }}>
+          {content}
+        </div>
+        <div style={{
+          fontSize: '10px',
+          marginTop: '4px',
+          textAlign: 'right',
+          color: isOwn ? 'rgba(255,255,255,0.7)' : '#9ca3af'
         }}>
-          {senderName}
+          {new Date(timestamp).toLocaleTimeString()}
+          {isOwn && status === 'read' && ' ✓✓'}
+          {isOwn && status === 'delivered' && ' ✓✓'}
+          {isOwn && status === 'sent' && ' ✓'}
         </div>
-        
-        <div 
-          style={{ 
-            padding: '12px', 
-            borderRadius: '16px', 
-            background: isMe ? '#667eea' : 'white', 
-            color: isMe ? 'white' : '#1f2937', 
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            borderBottomRightRadius: isMe ? '4px' : '16px',
-            borderBottomLeftRadius: isMe ? '16px' : '4px',
-            wordBreak: 'break-word',
-            cursor: isImage ? 'pointer' : 'default'
-          }}
-          onClick={isImage ? onImageClick : undefined}
-        >
-          {isImage && imageUrl ? (
-            <img 
-              src={imageUrl} 
-              alt="Shared" 
-              style={{ 
-                maxWidth: '200px', 
-                maxHeight: '200px', 
-                borderRadius: '8px',
-                cursor: 'pointer'
-              }} 
-            />
-          ) : (
-            <div style={{ fontSize: '15px', lineHeight: '1.4' }}>
-              {content}
-            </div>
-          )}
-        </div>
-
-        {isMe && <MessageStatus status={status} timestamp={timestamp} />}
       </div>
     </div>
   )
