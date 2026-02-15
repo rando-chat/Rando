@@ -196,7 +196,7 @@ export function useChat(sessionId: string) {
 
   // Send message
   const sendMessage = async (content: string) => {
-    if (!content.trim() || !sessionId || !guestSession || partnerLeft) return
+    if (!content.trim() || !sessionId || !guestSession || partnerLeft) return false
 
     setIsSending(true)
     try {
@@ -217,9 +217,11 @@ export function useChat(sessionId: string) {
         })
 
       if (error) throw error
+      return true
 
     } catch (err: any) {
       setError(err.message)
+      return false
     } finally {
       setIsSending(false)
     }
@@ -266,14 +268,20 @@ export function useChat(sessionId: string) {
     }
   }
 
-  // UPLOAD IMAGE - FIXED to work like debug page
+  // UPLOAD IMAGE - EXACT COPY FROM DEBUG PAGE
   const uploadImage = async (file: File) => {
-    if (!sessionId || !guestSession) return null
+    if (!sessionId || !guestSession) {
+      console.log('❌ No session or guest')
+      return null
+    }
+
+    console.log('📷 Starting upload process...')
+    console.log('📷 File:', file.name, file.type, file.size)
+    console.log('📷 Session:', sessionId)
+    console.log('📷 Guest:', guestSession.guest_id)
 
     try {
-      console.log('📷 Starting upload:', file.name)
-
-      // Validate
+      // Validate file
       if (!file.type.startsWith('image/')) {
         throw new Error('Please select an image file')
       }
@@ -286,49 +294,53 @@ export function useChat(sessionId: string) {
       const fileName = `${guestSession.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
       const filePath = `chat-images/${fileName}`
 
-      console.log('📷 Uploading to:', filePath)
+      console.log('📤 Uploading to:', filePath)
 
-      // Upload to Supabase Storage
+      // 1. Upload to Supabase Storage (EXACT same as debug)
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(filePath, file)
 
       if (uploadError) {
-        console.error('❌ Upload error:', uploadError)
+        console.log('❌ Upload error:', uploadError)
         throw uploadError
       }
 
       console.log('✅ File uploaded to storage')
 
-      // Get public URL
+      // 2. Get public URL (EXACT same as debug)
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath)
       
-      console.log('📷 Public URL:', publicUrl)
+      console.log('🔗 Public URL:', publicUrl)
 
-      // Send message with image URL - DIRECT INSERT like debug
+      // 3. Send message with image URL (EXACT same as debug)
+      const messageData = {
+        session_id: sessionId,
+        sender_id: guestSession.guest_id,
+        sender_is_guest: true,
+        sender_display_name: guestSession.display_name,
+        content: `📷 Image: ${publicUrl}`,
+        created_at: new Date().toISOString()
+      }
+
+      console.log('📨 Inserting message:', messageData)
+
       const { error: messageError } = await supabase
         .from('messages')
-        .insert({
-          session_id: sessionId,
-          sender_id: guestSession.guest_id,
-          sender_is_guest: true,
-          sender_display_name: guestSession.display_name,
-          content: `📷 Image: ${publicUrl}`,
-          created_at: new Date().toISOString()
-        })
+        .insert(messageData)
 
       if (messageError) {
-        console.error('❌ Message error:', messageError)
+        console.log('❌ Message error:', messageError)
         throw messageError
       }
 
-      console.log('✅ Image message sent')
+      console.log('✅ Image message sent successfully')
       return publicUrl
 
     } catch (err: any) {
-      console.error('❌ Upload error:', err)
+      console.log('❌ Upload failed:', err.message)
       setError(err.message)
       return null
     }
