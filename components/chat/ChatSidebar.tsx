@@ -23,6 +23,16 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   if (!isOpen) return null
 
+  const handleAddFriend = async () => {
+    try {
+      await onAddFriend()
+      // Optional: Show success message
+      alert(`Friend request sent to ${partnerName}!`)
+    } catch (error) {
+      console.error('Failed to add friend:', error)
+    }
+  }
+
   return (
     <div style={{
       position: 'fixed' as const,
@@ -138,7 +148,7 @@ export function ChatSidebar({
       {/* Actions */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <button
-          onClick={onAddFriend}
+          onClick={handleAddFriend}
           style={{
             width: '100%',
             padding: '14px',
@@ -151,6 +161,8 @@ export function ChatSidebar({
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(124,58,237,0.1)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
           ➕ Add Friend
         </button>
@@ -168,6 +180,8 @@ export function ChatSidebar({
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(124,58,237,0.1)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
           ⚠️ Report User
         </button>
@@ -185,6 +199,8 @@ export function ChatSidebar({
             cursor: 'pointer',
             transition: 'all 0.2s ease',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
         >
           🚫 Block User
         </button>
