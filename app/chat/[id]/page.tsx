@@ -44,7 +44,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   // Simulate online status changes
   useEffect(() => {
     const onlineInterval = setInterval(() => {
-      setIsOnline(Math.random() > 0.3) // 70% chance online
+      setIsOnline(Math.random() > 0.3)
     }, 30000)
     return () => clearInterval(onlineInterval)
   }, [])
@@ -97,8 +97,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   const handleEditImage = () => {
     if (!editImage) return
-    // In a real app, you'd have an image editor here
-    // For now, just send it
     const fileInput = fileInputRef.current?.files?.[0]
     if (fileInput) uploadImage(fileInput)
     setEditImage(null)
@@ -129,7 +127,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   const handleReport = async () => {
     if (!reportReason.trim()) return
-    // In a real app, this would call your reporting API
     alert(`Report sent: ${reportReason}`)
     setShowReport(false)
     setReportReason('')
@@ -142,6 +139,12 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       await endChat()
       router.push('/matchmaking')
     }
+  }
+
+  // 🔥 FIX: Add handleEndChat function
+  const handleEndChat = async () => {
+    await endChat()
+    router.push('/matchmaking')
   }
 
   // Auto-scroll to bottom when messages change
