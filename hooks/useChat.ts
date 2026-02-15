@@ -266,11 +266,13 @@ export function useChat(sessionId: string) {
     }
   }
 
-  // Upload image
+  // UPLOAD IMAGE - FIXED to work like debug page
   const uploadImage = async (file: File) => {
     if (!sessionId || !guestSession) return null
 
     try {
+      console.log('📷 Starting upload:', file.name)
+
       // Validate
       if (!file.type.startsWith('image/')) {
         throw new Error('Please select an image file')
@@ -279,29 +281,54 @@ export function useChat(sessionId: string) {
         throw new Error('Image must be less than 5MB')
       }
 
-      // Generate unique filename
+      // Generate unique filename (same as debug)
       const fileExt = file.name.split('.').pop()
       const fileName = `${guestSession.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
       const filePath = `chat-images/${fileName}`
+
+      console.log('📷 Uploading to:', filePath)
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(filePath, file)
 
-      if (uploadError) throw uploadError
+      if (uploadError) {
+        console.error('❌ Upload error:', uploadError)
+        throw uploadError
+      }
+
+      console.log('✅ File uploaded to storage')
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath)
+      
+      console.log('📷 Public URL:', publicUrl)
 
-      // Send message with image URL
-      await sendMessage(`📷 Image: ${publicUrl}`)
+      // Send message with image URL - DIRECT INSERT like debug
+      const { error: messageError } = await supabase
+        .from('messages')
+        .insert({
+          session_id: sessionId,
+          sender_id: guestSession.guest_id,
+          sender_is_guest: true,
+          sender_display_name: guestSession.display_name,
+          content: `📷 Image: ${publicUrl}`,
+          created_at: new Date().toISOString()
+        })
 
+      if (messageError) {
+        console.error('❌ Message error:', messageError)
+        throw messageError
+      }
+
+      console.log('✅ Image message sent')
       return publicUrl
 
     } catch (err: any) {
+      console.error('❌ Upload error:', err)
       setError(err.message)
       return null
     }
