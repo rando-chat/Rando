@@ -2,173 +2,414 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { RealtimeChannel } from '@supabase/supabase-js'
 
-export function useMatchmaking() {
-  const [session, setSession] = useState<any>(null)
-  const [isInQueue, setIsInQueue] = useState(false)
-  const [estimatedWait, setEstimatedWait] = useState(30)
-  const [matchFound, setMatchFound] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
+export function useChat(sessionId: string) {
+  const [messages, setMessages] = useState<any[]>([])
+  const [guestSession, setGuestSession] = useState<any>(null)
+  const [partnerName, setPartnerName] = useState('')
+  const [partnerLeft, setPartnerLeft] = useState(false)
+  const [isTyping, setIsTyping] = useState(false)
+  const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const [loading, setLoading] = useState(true)
+  
+  const channelRef = useRef<RealtimeChannel | null>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Initialize guest session
+  // Load guest session
   useEffect(() => {
-    const initialize = async () => {
+    const loadGuestSession = async () => {
       try {
         const { data, error } = await supabase.rpc('create_guest_session')
         if (error) throw error
         if (data && data.length > 0) {
-          setSession(data[0])
+          setGuestSession(data[0])
         }
       } catch (err: any) {
         setError(err.message)
       }
     }
 
-    initialize()
-
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current)
-      if (session?.guest_id) {
-        supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
-      }
-    }
+    loadGuestSession()
   }, [])
 
-  const checkForMatch = async () => {
-    if (!session) return
+  // Load messages and setup subscription
+  useEffect(() => {
+    if (!sessionId || !guestSession) return
 
-    try {
-      // ALWAYS check for existing session first
-      const { data: existingSession } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .or(`user1_id.eq.${session.guest_id},user2_id.eq.${session.guest_id}`)
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (existingSession) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current)
-          pollingRef.current = null
-        }
-        setMatchFound(existingSession)
-        setIsInQueue(false)
-        return
-      }
-
-      // Get ALL queue entries
-      const { data: queue } = await supabase
-        .from('matchmaking_queue')
-        .select('*')
-        .is('matched_at', null)
-        .order('entered_at', { ascending: true })
-
-      if (!queue || queue.length < 2) {
-        setEstimatedWait(prev => Math.max(5, prev - 1))
-        return
-      }
-
-      // Find partner (not yourself)
-      const partner = queue.find(u => u.user_id !== session.guest_id)
-      if (!partner) {
-        setEstimatedWait(prev => Math.max(5, prev - 1))
-        return
-      }
-
-      // Deterministic tie-breaker
-      if (session.guest_id < partner.user_id) {
-        await supabase
-          .from('matchmaking_queue')
-          .update({ matched_at: new Date().toISOString() })
-          .in('user_id', [session.guest_id, partner.user_id])
-
-        const { data: newSession } = await supabase
+    const loadMessages = async () => {
+      try {
+        setLoading(true)
+        
+        // Get session details first
+        const { data: session, error: sessionError } = await supabase
           .from('chat_sessions')
-          .insert({
-            user1_id: session.guest_id,
-            user2_id: partner.user_id,
-            user1_display_name: session.display_name,
-            user2_display_name: partner.display_name,
-            status: 'active',
-            started_at: new Date().toISOString()
-          })
-          .select()
+          .select('*')
+          .eq('id', sessionId)
           .single()
 
-        if (newSession) {
-          await supabase.from('matchmaking_queue').delete().in('user_id', [session.guest_id, partner.user_id])
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current)
-            pollingRef.current = null
-          }
-          setMatchFound(newSession)
-          setIsInQueue(false)
+        if (sessionError) throw sessionError
+
+        // Set partner name
+        if (session.user1_id === guestSession.guest_id) {
+          setPartnerName(session.user2_display_name)
+        } else {
+          setPartnerName(session.user1_display_name)
         }
-      } else {
-        setEstimatedWait(prev => Math.max(5, prev - 1))
+
+        // Load messages
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: true })
+
+        if (messagesError) throw messagesError
+
+        setMessages(messagesData || [])
+
+        // Mark messages as read
+        const unreadIds = messagesData
+          ?.filter(m => m.sender_id !== guestSession.guest_id && !m.read_by_recipient)
+          .map(m => m.id) || []
+
+        if (unreadIds.length > 0) {
+          await supabase
+            .from('messages')
+            .update({ read_by_recipient: true })
+            .in('id', unreadIds)
+        }
+
+        // Setup realtime subscription
+        setupSubscription(sessionId)
+
+      } catch (err: any) {
+        setError(err.message)
+      } finally {
+        setLoading(false)
       }
-    } catch (err: any) {
-      console.error('Check error:', err)
+    }
+
+    loadMessages()
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [sessionId, guestSession])
+
+  const setupSubscription = (chatSessionId: string) => {
+    if (channelRef.current) return
+
+    const channel = supabase.channel(`chat-${chatSessionId}`, {
+      config: {
+        broadcast: { self: true },
+        presence: { key: guestSession?.guest_id }
+      }
+    })
+
+    channelRef.current = channel
+
+    // Listen for new messages
+    channel
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `session_id=eq.${chatSessionId}`
+      }, async (payload) => {
+        const newMessage = payload.new
+        
+        setMessages(prev => {
+          if (prev.some(m => m.id === newMessage.id)) return prev
+          return [...prev, newMessage]
+        })
+
+        // Mark as read if not from self
+        if (newMessage.sender_id !== guestSession?.guest_id) {
+          await supabase
+            .from('messages')
+            .update({ read_by_recipient: true })
+            .eq('id', newMessage.id)
+        }
+
+        // Auto-scroll
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
+      })
+
+    // Listen for typing indicators
+    channel
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (payload.userId !== guestSession?.guest_id) {
+          setIsTyping(payload.isTyping)
+
+          // Clear typing after 3 seconds if no update
+          if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current)
+          }
+          
+          if (payload.isTyping) {
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsTyping(false)
+            }, 3000)
+          }
+        }
+      })
+
+    // Listen for chat session updates (partner left)
+    channel
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_sessions',
+        filter: `id=eq.${chatSessionId}`
+      }, (payload) => {
+        if (payload.new.status === 'ended') {
+          setPartnerLeft(true)
+        }
+      })
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Subscribed to chat channel')
+      }
+    })
+  }
+
+  // Generate content hash for messages
+  const generateHash = async (text: string): Promise<string | null> => {
+    try {
+      const msgBuffer = new TextEncoder().encode(text)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    } catch {
+      return null
     }
   }
 
-  const joinQueue = async () => {
-    if (!session) return
+  // Send message
+  const sendMessage = async (content: string) => {
+    if (!content.trim() || !sessionId || !guestSession || partnerLeft) return
 
-    setIsLoading(true)
+    setIsSending(true)
     try {
-      // Clean up old entry
-      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
+      const contentHash = await generateHash(content)
 
-      // Join queue
-      const { error } = await supabase.from('matchmaking_queue').insert({
-        user_id: session.guest_id,
-        display_name: session.display_name,
-        is_guest: true,
-        tier: 'free',
-        interests: [],
-        entered_at: new Date().toISOString()
-      })
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          session_id: sessionId,
+          sender_id: guestSession.guest_id,
+          sender_is_guest: true,
+          sender_display_name: guestSession.display_name,
+          content: content,
+          content_hash: contentHash,
+          is_safe: true, // Will be updated by DB trigger
+          delivered: true,
+          created_at: new Date().toISOString()
+        })
 
       if (error) throw error
-
-      setIsInQueue(true)
-      setEstimatedWait(30)
-
-      // Start polling
-      if (pollingRef.current) clearInterval(pollingRef.current)
-      setTimeout(() => checkForMatch(), 100)
-      pollingRef.current = setInterval(checkForMatch, 500)
 
     } catch (err: any) {
       setError(err.message)
     } finally {
-      setIsLoading(false)
+      setIsSending(false)
     }
   }
 
-  const leaveQueue = async () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
+  // Send typing indicator
+  const sendTyping = (typing: boolean) => {
+    if (!channelRef.current || !guestSession) return
+
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        userId: guestSession.guest_id,
+        isTyping: typing
+      }
+    })
+  }
+
+  // End chat
+  const endChat = async () => {
+    if (!sessionId) return
+
+    try {
+      const { error } = await supabase
+        .from('chat_sessions')
+        .update({ 
+          status: 'ended', 
+          ended_at: new Date().toISOString() 
+        })
+        .eq('id', sessionId)
+
+      if (error) throw error
+
+      setPartnerLeft(true)
+
+      // Clean up channel
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+
+    } catch (err: any) {
+      setError(err.message)
     }
-    if (session) {
-      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
+  }
+
+  // Upload image
+  const uploadImage = async (file: File): Promise<string | null> => {
+    if (!sessionId || !guestSession) return null
+
+    try {
+      // Validate
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please select an image file')
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Image must be less than 5MB')
+      }
+
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${guestSession.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
+      const filePath = `chat-images/${fileName}`
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath)
+
+      // Send message with image URL
+      await sendMessage(`📷 Image: ${publicUrl}`)
+
+      return publicUrl
+
+    } catch (err: any) {
+      setError(err.message)
+      return null
     }
-    setIsInQueue(false)
-    setEstimatedWait(30)
+  }
+
+  // Report user
+  const reportUser = async (reason: string, category: string) => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const reportedUserId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
+      if (!reportedUserId) throw new Error('No partner found')
+
+      const { error } = await supabase.rpc('handle_user_report', {
+        p_reporter_id: guestSession.guest_id,
+        p_reporter_is_guest: true,
+        p_reported_user_id: reportedUserId,
+        p_reported_user_is_guest: true,
+        p_session_id: sessionId,
+        p_reason: reason,
+        p_category: category,
+        p_evidence: { messages: messages.map(m => m.id) }
+      })
+
+      if (error) throw error
+
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Block user
+  const blockUser = async () => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const blockedUserId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
+      if (!blockedUserId) throw new Error('No partner found')
+
+      // Insert into blocked_users table
+      const { error } = await supabase
+        .from('blocked_users')
+        .insert({
+          user_id: guestSession.guest_id,
+          blocked_user_id: blockedUserId,
+          is_guest: true,
+          blocked_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+      // End the chat
+      await endChat()
+
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Add friend
+  const addFriend = async () => {
+    if (!guestSession || !sessionId) return
+
+    try {
+      const friendId = messages.find(m => m.sender_id !== guestSession.guest_id)?.sender_id
+      if (!friendId) throw new Error('No partner found')
+
+      // Insert into friends table
+      const { error } = await supabase
+        .from('friends')
+        .insert({
+          user_id: guestSession.guest_id,
+          friend_id: friendId,
+          is_guest: true,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
+
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Scroll to bottom
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   return {
-    session,
-    isInQueue,
-    estimatedWait,
-    matchFound,
-    joinQueue,
-    leaveQueue,
-    isLoading,
+    messages,
+    guestSession,
+    partnerName,
+    partnerLeft,
+    isTyping,
+    isSending,
+    loading,
     error,
+    messagesEndRef,
+    sendMessage,
+    sendTyping,
+    endChat,
+    uploadImage,
+    reportUser,
+    blockUser,
+    addFriend,
+    scrollToBottom
   }
 }
