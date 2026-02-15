@@ -12,7 +12,7 @@ export function useChat(sessionId: string) {
   const [isTyping, setIsTyping] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true) // Add loading state
+  const [loading, setLoading] = useState(true)
   
   const channelRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -25,7 +25,6 @@ export function useChat(sessionId: string) {
       if (data && data.length > 0) {
         setGuestSession(data[0])
         setMyName(data[0].display_name)
-        console.log('👤 My guest session:', data[0])
       }
     }
     loadGuestSession()
@@ -37,42 +36,25 @@ export function useChat(sessionId: string) {
 
     const loadMessages = async () => {
       setLoading(true)
-      console.log('📊 Loading chat for session:', sessionId)
-      console.log('👤 Current user:', guestSession)
 
       // Get session to know partner name
-      const { data: session, error } = await supabase
+      const { data: session } = await supabase
         .from('chat_sessions')
         .select('*')
         .eq('id', sessionId)
         .single()
 
-      if (error) {
-        console.error('❌ Error loading session:', error)
-        setLoading(false)
-        return
-      }
-
-      console.log('🔍 RAW SESSION DATA:', session)
-      console.log('🔍 My guest ID:', guestSession.guest_id)
-      console.log('🔍 Session user1:', session.user1_id, session.user1_display_name)
-      console.log('🔍 Session user2:', session.user2_id, session.user2_display_name)
-
-      // FIXED: Correctly identify who is who and set names IMMEDIATELY
-      if (session.user1_id === guestSession.guest_id) {
-        // Current user is user1
-        setMyName(session.user1_display_name)
-        setPartnerName(session.user2_display_name)
-        console.log('✅ I am user1:', session.user1_display_name)
-        console.log('👥 Partner is user2:', session.user2_display_name)
-      } else if (session.user2_id === guestSession.guest_id) {
-        // Current user is user2
-        setMyName(session.user2_display_name)
-        setPartnerName(session.user1_display_name)
-        console.log('✅ I am user2:', session.user2_display_name)
-        console.log('👥 Partner is user1:', session.user1_display_name)
-      } else {
-        console.error('❌ Current user not found in session!')
+      if (session) {
+        // Set partner name based on who the current user is
+        if (session.user1_id === guestSession.guest_id) {
+          // Current user is user1, partner is user2
+          setPartnerName(session.user2_display_name)
+          setMyName(session.user1_display_name)
+        } else {
+          // Current user is user2, partner is user1
+          setPartnerName(session.user1_display_name)
+          setMyName(session.user2_display_name)
+        }
       }
 
       // Load messages
@@ -83,7 +65,6 @@ export function useChat(sessionId: string) {
         .order('created_at', { ascending: true })
 
       if (messagesData) {
-        console.log('📨 Loaded', messagesData.length, 'messages')
         setMessages(messagesData)
       }
 
@@ -104,8 +85,6 @@ export function useChat(sessionId: string) {
   const setupSubscription = () => {
     if (channelRef.current || !guestSession) return
 
-    console.log('🔌 Setting up realtime subscription...')
-
     const channel = supabase.channel(`chat-${sessionId}-${Date.now()}`, {
       config: {
         broadcast: { self: true },
@@ -123,7 +102,6 @@ export function useChat(sessionId: string) {
         filter: `session_id=eq.${sessionId}`
       }, (payload) => {
         const msg = payload.new
-        console.log('📨 Realtime message received:', msg)
         setMessages(prev => [...prev, msg])
         
         setTimeout(() => {
@@ -143,16 +121,13 @@ export function useChat(sessionId: string) {
         }
       })
 
-    channel.subscribe((status) => {
-      console.log('📡 Channel status:', status)
-    })
+    channel.subscribe()
   }
 
   // Send message
   const sendMessage = async (content: string) => {
     if (!content.trim() || !sessionId || !guestSession || partnerLeft) return
 
-    console.log('📤 Sending message:', content)
     setIsSending(true)
     
     const { error } = await supabase.from('messages').insert({
@@ -165,9 +140,7 @@ export function useChat(sessionId: string) {
     })
 
     if (error) {
-      console.error('❌ Error sending message:', error)
-    } else {
-      console.log('✅ Message sent')
+      console.error('Error sending message:', error)
     }
     
     setIsSending(false)
@@ -185,26 +158,14 @@ export function useChat(sessionId: string) {
 
   // Upload image
   const uploadImage = async (file: File) => {
-    console.log('📷 ===== IMAGE UPLOAD STARTED =====')
-    console.log('📷 File:', file.name)
-    console.log('📷 Type:', file.type)
-    console.log('📷 Size:', file.size)
-    console.log('📷 Session:', sessionId)
-    console.log('📷 Guest:', guestSession)
-
-    if (!sessionId || !guestSession) {
-      console.log('❌ Missing session or guest')
-      return null
-    }
+    if (!sessionId || !guestSession) return null
 
     try {
       if (!file.type.startsWith('image/')) {
-        console.log('❌ Not an image file')
         throw new Error('Not an image')
       }
       
       if (file.size > 5 * 1024 * 1024) {
-        console.log('❌ File too large:', file.size)
         throw new Error('File too large')
       }
 
@@ -212,27 +173,17 @@ export function useChat(sessionId: string) {
       const fileName = `${guestSession.guest_id}/${sessionId}/${Date.now()}.${fileExt}`
       const filePath = `chat-images/${fileName}`
 
-      console.log('📤 Uploading to:', filePath)
-
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
         .upload(filePath, file)
 
-      if (uploadError) {
-        console.log('❌ Upload error:', uploadError)
-        throw uploadError
-      }
-
-      console.log('✅ File uploaded to storage')
+      if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath)
-      
-      console.log('🔗 Public URL:', publicUrl)
 
-      console.log('📨 Sending image message...')
-      const { error: messageError } = await supabase.from('messages').insert({
+      await supabase.from('messages').insert({
         session_id: sessionId,
         sender_id: guestSession.guest_id,
         sender_is_guest: true,
@@ -241,17 +192,9 @@ export function useChat(sessionId: string) {
         created_at: new Date().toISOString()
       })
 
-      if (messageError) {
-        console.log('❌ Message error:', messageError)
-        throw messageError
-      }
-
-      console.log('✅ Image message sent successfully')
-      console.log('📷 ===== IMAGE UPLOAD COMPLETE =====')
       return publicUrl
-
     } catch (err) {
-      console.log('❌ Upload failed:', err)
+      console.error('Upload error:', err)
       return null
     }
   }
@@ -264,7 +207,7 @@ export function useChat(sessionId: string) {
       const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
       if (!partnerMsg) throw new Error('No partner found')
 
-      const { error } = await supabase.rpc('handle_user_report', {
+      await supabase.rpc('handle_user_report', {
         p_reporter_id: guestSession.guest_id,
         p_reporter_is_guest: true,
         p_reported_user_id: partnerMsg.sender_id,
@@ -274,10 +217,8 @@ export function useChat(sessionId: string) {
         p_category: category,
         p_evidence: { messages: messages.map(m => m.id) }
       })
-
-      if (error) throw error
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('Report error:', err)
     }
   }
 
@@ -289,7 +230,7 @@ export function useChat(sessionId: string) {
       const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
       if (!partnerMsg) throw new Error('No partner found')
 
-      const { error } = await supabase
+      await supabase
         .from('friends')
         .insert({
           user_id: guestSession.guest_id,
@@ -298,10 +239,8 @@ export function useChat(sessionId: string) {
           status: 'pending',
           created_at: new Date().toISOString()
         })
-
-      if (error) throw error
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('Add friend error:', err)
     }
   }
 
@@ -313,7 +252,7 @@ export function useChat(sessionId: string) {
       const partnerMsg = messages.find(m => m.sender_id !== guestSession.guest_id)
       if (!partnerMsg) throw new Error('No partner found')
 
-      const { error } = await supabase
+      await supabase
         .from('blocked_users')
         .insert({
           user_id: guestSession.guest_id,
@@ -321,11 +260,10 @@ export function useChat(sessionId: string) {
           is_guest: true,
           blocked_at: new Date().toISOString()
         })
-
-      if (error) throw error
+      
       await endChat()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('Block error:', err)
     }
   }
 
