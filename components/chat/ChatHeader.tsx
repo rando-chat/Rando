@@ -1,7 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase/client'
+
 interface ChatHeaderProps {
-  partnerName: string  // This should be the PARTNER'S name
+  sessionId: string
+  guestId?: string
   isOnline: boolean
   isTyping: boolean
   partnerLeft: boolean
@@ -11,7 +15,8 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({
-  partnerName,
+  sessionId,
+  guestId,
   isOnline,
   isTyping,
   partnerLeft,
@@ -19,6 +24,31 @@ export function ChatHeader({
   onReport,
   onEndChat
 }: ChatHeaderProps) {
+  const [partnerName, setPartnerName] = useState('')
+
+  // Load partner name directly from database
+  useEffect(() => {
+    if (!sessionId || !guestId) return
+
+    const loadPartnerName = async () => {
+      const { data: session } = await supabase
+        .from('chat_sessions')
+        .select('user1_display_name, user2_display_name, user1_id, user2_id')
+        .eq('id', sessionId)
+        .single()
+
+      if (session) {
+        if (session.user1_id === guestId) {
+          setPartnerName(session.user2_display_name)
+        } else {
+          setPartnerName(session.user1_display_name)
+        }
+      }
+    }
+
+    loadPartnerName()
+  }, [sessionId, guestId])
+
   return (
     <div style={{
       background: 'rgba(10,10,15,0.95)',
@@ -70,14 +100,14 @@ export function ChatHeader({
             marginBottom: 2,
             fontFamily: "'Georgia', serif",
           }}>
-            {partnerLeft ? `${partnerName} left` : partnerName}
+            {partnerLeft ? `${partnerName} left` : partnerName || 'Connecting...'}
           </h2>
           <p style={{
             fontSize: 'clamp(11px, 2.8vw, 12px)',
             color: isTyping ? '#7c3aed' : '#60607a',
             fontStyle: isTyping ? 'normal' : 'italic',
           }}>
-            {partnerLeft ? 'Chat ended' : isTyping ? 'typing...' : 'Online'}
+            {partnerLeft ? 'Chat ended' : isTyping ? 'typing...' : isOnline ? 'Online' : 'Offline'}
           </p>
         </div>
       </div>
