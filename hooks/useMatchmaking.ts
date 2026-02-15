@@ -1,9 +1,10 @@
 'use client'
+
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
 export function useMatchmaking() {
-  const [session, setSession] = useState<any>(null)  // Store entire session object
+  const [session, setSession] = useState<any>(null)
   const [isInQueue, setIsInQueue] = useState(false)
   const [estimatedWait, setEstimatedWait] = useState(30)
   const [matchFound, setMatchFound] = useState<any>(null)
@@ -11,22 +12,16 @@ export function useMatchmaking() {
   const [error, setError] = useState<string | null>(null)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Initialize guest session on mount
+  // Initialize guest session
   useEffect(() => {
     const initialize = async () => {
       try {
-        const { data, error } = await supabase.rpc('create_guest_session', {
-          p_ip_address: null,
-          p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-          p_country_code: null
-        })
-
+        const { data, error } = await supabase.rpc('create_guest_session')
         if (error) throw error
         if (data && data.length > 0) {
           setSession(data[0])
         }
       } catch (err: any) {
-        console.error('Init error:', err)
         setError(err.message)
       }
     }
@@ -41,36 +36,11 @@ export function useMatchmaking() {
     }
   }, [])
 
-  const startPolling = () => {
-    if (pollingRef.current) clearInterval(pollingRef.current)
-    setTimeout(() => checkForMatch(), 100)
-    pollingRef.current = setInterval(checkForMatch, 500)
-  }
-
   const checkForMatch = async () => {
     if (!session) return
 
     try {
-      // 🔥 FIX: Check if user already in an active chat (prevents duplicates)
-      const { data: existingChat } = await supabase
-        .from('chat_sessions')
-        .select('id')
-        .or(`user1_id.eq.${session.guest_id},user2_id.eq.${session.guest_id}`)
-        .eq('status', 'active')
-        .maybeSingle();
-
-      if (existingChat) {
-        console.log('⚠️ Already in chat, redirecting...');
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
-        }
-        setMatchFound(existingChat);
-        setIsInQueue(false);
-        return;
-      }
-
-      // Check for existing session
+      // ALWAYS check for existing session first
       const { data: existingSession } = await supabase
         .from('chat_sessions')
         .select('*')
@@ -88,19 +58,7 @@ export function useMatchmaking() {
         return
       }
 
-      // Check if in queue
-      const { data: myEntry } = await supabase
-        .from('matchmaking_queue')
-        .select('*')
-        .eq('user_id', session.guest_id)
-        .is('matched_at', null)
-        .maybeSingle()
-
-      const amIInQueue = !!myEntry
-      if (amIInQueue !== isInQueue) setIsInQueue(amIInQueue)
-      if (!amIInQueue) return
-
-      // Get queue
+      // Get ALL queue entries
       const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
@@ -112,16 +70,14 @@ export function useMatchmaking() {
         return
       }
 
-      // 🔥 FIX: Get the first person in queue that's not you
-      // This ensures we always match with the oldest waiting user
-      const partner = queue[0].user_id === session.guest_id ? queue[1] : queue[0]
-      
+      // Find partner (not yourself)
+      const partner = queue.find(u => u.user_id !== session.guest_id)
       if (!partner) {
         setEstimatedWait(prev => Math.max(5, prev - 1))
         return
       }
 
-      // Create session if I should
+      // Deterministic tie-breaker
       if (session.guest_id < partner.user_id) {
         await supabase
           .from('matchmaking_queue')
@@ -154,7 +110,7 @@ export function useMatchmaking() {
         setEstimatedWait(prev => Math.max(5, prev - 1))
       }
     } catch (err: any) {
-      console.error('Match error:', err)
+      console.error('Check error:', err)
     }
   }
 
@@ -162,12 +118,12 @@ export function useMatchmaking() {
     if (!session) return
 
     setIsLoading(true)
-    setError(null)
-
     try {
+      // Clean up old entry
       await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
 
-      await supabase.from('matchmaking_queue').insert({
+      // Join queue
+      const { error } = await supabase.from('matchmaking_queue').insert({
         user_id: session.guest_id,
         display_name: session.display_name,
         is_guest: true,
@@ -176,9 +132,16 @@ export function useMatchmaking() {
         entered_at: new Date().toISOString()
       })
 
+      if (error) throw error
+
       setIsInQueue(true)
       setEstimatedWait(30)
-      startPolling()
+
+      // Start polling
+      if (pollingRef.current) clearInterval(pollingRef.current)
+      setTimeout(() => checkForMatch(), 100)
+      pollingRef.current = setInterval(checkForMatch, 500)
+
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -199,9 +162,8 @@ export function useMatchmaking() {
   }
 
   return {
-    session,  // Return entire session object
+    session,
     isInQueue,
-    queuePosition: 1,
     estimatedWait,
     matchFound,
     joinQueue,
