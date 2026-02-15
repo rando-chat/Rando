@@ -1,7 +1,7 @@
 'use client'
 
 interface ChatHeaderProps {
-  partnerName: string
+  partnerName: string  // This should be the PARTNER'S name
   isOnline: boolean
   isTyping: boolean
   partnerLeft: boolean
@@ -70,14 +70,14 @@ export function ChatHeader({
             marginBottom: 2,
             fontFamily: "'Georgia', serif",
           }}>
-            {partnerLeft ? `${partnerName} left` : partnerName || 'Stranger'}
+            {partnerLeft ? `${partnerName} left` : partnerName}
           </h2>
           <p style={{
             fontSize: 'clamp(11px, 2.8vw, 12px)',
             color: isTyping ? '#7c3aed' : '#60607a',
             fontStyle: isTyping ? 'normal' : 'italic',
           }}>
-            {partnerLeft ? 'Chat ended' : isTyping ? 'typing...' : isOnline ? 'Online' : 'Offline'}
+            {partnerLeft ? 'Chat ended' : isTyping ? 'typing...' : 'Online'}
           </p>
         </div>
       </div>
