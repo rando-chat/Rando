@@ -19,6 +19,23 @@ export function ChatHeader({
   onReport,
   onEndChat
 }: ChatHeaderProps) {
+  // Don't render until we have a partner name
+  if (!partnerName) {
+    return (
+      <div style={{
+        background: 'rgba(10,10,15,0.95)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid rgba(124,58,237,0.2)',
+        padding: 'clamp(12px, 3vw, 16px) clamp(16px, 4vw, 24px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div style={{ color: '#60607a' }}>Loading chat...</div>
+      </div>
+    )
+  }
+
   return (
     <div style={{
       background: 'rgba(10,10,15,0.95)',
