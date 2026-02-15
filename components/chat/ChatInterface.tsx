@@ -94,7 +94,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
   const handleImageUpload = async (file: File) => {
     if (!chat.guestSession || !sessionId) return
-    await chat.uploadImage(file, sessionId)
+    await chat.uploadImage(file) // FIXED: removed sessionId argument
   }
 
   return (
