@@ -1,159 +1,96 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { EmojiPicker } from './EmojiPicker'
+import { useState } from 'react'
 
 interface ChatInputProps {
+  sessionId: string
   onSendMessage: (content: string) => Promise<void>
   onTyping: () => void
   isSending: boolean
-  sessionId: string
-  guestId?: string
-  displayName?: string
   onEditImage: (url: string) => void
 }
 
 export function ChatInput({
+  sessionId,
   onSendMessage,
   onTyping,
   isSending,
   onEditImage
 }: ChatInputProps) {
-  const [messageInput, setMessageInput] = useState('')
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [message, setMessage] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
 
-  const handleSend = async () => {
-    if (!messageInput.trim() || isSending) return
-    await onSendMessage(messageInput)
-    setMessageInput('')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!message.trim() || isSending) return
+
+    await onSendMessage(message)
+    setMessage('')
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image')
-      return
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
     }
-    
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB')
-      return
-    }
-
-    onEditImage(URL.createObjectURL(file))
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   return (
-    <div style={{ 
-      padding: '16px', 
-      background: 'white', 
-      borderTop: '1px solid #e5e7eb', 
-      position: 'relative'
-    }}>
-      {showEmojiPicker && (
-        <EmojiPicker
-          onSelect={(emoji) => setMessageInput(prev => prev + emoji)}
-          onClose={() => setShowEmojiPicker(false)}
-        />
-      )}
-
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <button 
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
-          style={{ 
-            padding: '12px', 
-            background: '#f3f4f6', 
-            border: 'none', 
-            borderRadius: '8px', 
-            cursor: 'pointer', 
-            fontSize: '20px',
-            position: 'relative'
-          }}
-        >
-          😊
-        </button>
-        
-        <input
-          value={messageInput}
-          onChange={(e) => {
-            setMessageInput(e.target.value)
-            onTyping()
-          }}
-          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Type a message..."
-          style={{ 
-            flex: 1,
-            padding: '12px 16px', 
-            border: '1px solid #e5e7eb', 
-            borderRadius: '24px', 
-            fontSize: '15px', 
-            outline: 'none'
-          }}
-        />
-        
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileSelect} 
-          accept="image/*" 
-          style={{ display: 'none' }} 
-        />
-        
-        <button 
-          onClick={() => fileInputRef.current?.click()} 
-          disabled={uploading} 
-          style={{ 
-            padding: '12px', 
-            background: uploading ? '#9ca3af' : '#f3f4f6', 
-            border: 'none', 
-            borderRadius: '8px', 
-            cursor: uploading ? 'not-allowed' : 'pointer', 
-            fontSize: '20px',
-            opacity: uploading ? 0.7 : 1
-          }}
-        >
-          📷
-        </button>
-        
-        <button 
-          onClick={handleSend} 
-          disabled={!messageInput.trim() || isSending} 
-          style={{ 
-            padding: '12px 24px', 
-            background: messageInput.trim() && !isSending ? '#667eea' : '#e5e7eb', 
-            color: messageInput.trim() && !isSending ? 'white' : '#9ca3af', 
-            border: 'none', 
-            borderRadius: '24px', 
-            cursor: messageInput.trim() && !isSending ? 'pointer' : 'not-allowed', 
-            fontWeight: 600, 
-            fontSize: '15px'
-          }}
-        >
-          {isSending ? '...' : 'Send'}
-        </button>
-      </div>
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        padding: 'clamp(12px, 3vw, 16px)',
+        background: 'rgba(10,10,15,0.95)',
+        backdropFilter: 'blur(10px)',
+        borderTop: '1px solid rgba(124,58,237,0.2)',
+        display: 'flex',
+        gap: 'clamp(8px, 2vw, 12px)',
+        zIndex: 20,
+        position: 'relative',
+      }}
+    >
+      <input
+        type="text"
+        value={message}
+        onChange={(e) => {
+          setMessage(e.target.value)
+          onTyping()
+        }}
+        onKeyDown={handleKeyDown}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        placeholder="Type a message..."
+        disabled={isSending}
+        style={{
+          flex: 1,
+          padding: 'clamp(10px, 2.5vw, 12px)',
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${isFocused ? '#7c3aed' : 'rgba(124,58,237,0.2)'}`,
+          borderRadius: 'clamp(8px, 2vw, 12px)',
+          color: '#f0f0f0',
+          fontSize: 'clamp(14px, 3.5vw, 16px)',
+          outline: 'none',
+          transition: 'all 0.2s ease',
+        }}
+      />
       
-      {uploading && (
-        <div style={{ 
-          position: 'absolute', 
-          bottom: '100%', 
-          left: '50%', 
-          transform: 'translateX(-50%)',
-          background: '#1f2937', 
-          color: 'white', 
-          padding: '4px 12px', 
-          borderRadius: '20px', 
-          fontSize: '12px',
-          marginBottom: '8px'
-        }}>
-          📤 Uploading...
-        </div>
-      )}
-    </div>
+      <button
+        type="submit"
+        disabled={!message.trim() || isSending}
+        style={{
+          padding: 'clamp(10px, 2.5vw, 12px) clamp(16px, 4vw, 24px)',
+          background: !message.trim() || isSending ? 'rgba(124,58,237,0.3)' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+          color: 'white',
+          border: 'none',
+          borderRadius: 'clamp(8px, 2vw, 12px)',
+          cursor: (!message.trim() || isSending) ? 'not-allowed' : 'pointer',
+          fontSize: 'clamp(14px, 3.5vw, 16px)',
+          fontWeight: 600,
+          transition: 'all 0.2s ease',
+        }}
+      >
+        Send
+      </button>
+    </form>
   )
 }
