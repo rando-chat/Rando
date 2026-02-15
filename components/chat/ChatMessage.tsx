@@ -22,34 +22,61 @@ export function ChatMessage({
     <div style={{
       display: 'flex',
       justifyContent: isOwn ? 'flex-end' : 'flex-start',
-      marginBottom: '12px'
+      marginBottom: '4px',
     }}>
       <div style={{
-        maxWidth: '70%',
-        background: isOwn ? '#667eea' : 'white',
-        color: isOwn ? 'white' : '#1f2937',
-        padding: '10px 14px',
-        borderRadius: '16px',
+        maxWidth: 'min(400px, 70vw)',
+        background: isOwn ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'rgba(255,255,255,0.03)',
+        color: isOwn ? 'white' : '#f0f0f0',
+        padding: 'clamp(8px, 2vw, 10px) clamp(12px, 3vw, 14px)',
+        borderRadius: 'clamp(12px, 3vw, 16px)',
         borderBottomRightRadius: isOwn ? '4px' : '16px',
         borderBottomLeftRadius: isOwn ? '16px' : '4px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        border: !isOwn ? '1px solid rgba(124,58,237,0.2)' : 'none',
+        position: 'relative',
       }}>
-        <div style={{ fontSize: '14px', marginBottom: '4px' }}>
-          {sender}
-        </div>
-        <div style={{ fontSize: '15px' }}>
+        {!isOwn && (
+          <div style={{
+            fontSize: 'clamp(11px, 2.8vw, 12px)',
+            color: '#7c3aed',
+            marginBottom: '4px',
+            fontWeight: 500,
+          }}>
+            {sender}
+          </div>
+        )}
+        
+        <div style={{
+          fontSize: 'clamp(14px, 3.5vw, 15px)',
+          lineHeight: 1.5,
+          wordBreak: 'break-word',
+        }}>
           {content}
         </div>
+
         <div style={{
-          fontSize: '10px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '4px',
           marginTop: '4px',
-          textAlign: 'right',
-          color: isOwn ? 'rgba(255,255,255,0.7)' : '#9ca3af'
         }}>
-          {new Date(timestamp).toLocaleTimeString()}
-          {isOwn && status === 'read' && ' ✓✓'}
-          {isOwn && status === 'delivered' && ' ✓✓'}
-          {isOwn && status === 'sent' && ' ✓'}
+          <span style={{
+            fontSize: 'clamp(9px, 2.2vw, 10px)',
+            color: isOwn ? 'rgba(255,255,255,0.7)' : '#60607a',
+          }}>
+            {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          {isOwn && (
+            <span style={{
+              fontSize: 'clamp(10px, 2.5vw, 11px)',
+              color: status === 'read' ? '#7c3aed' : '#a0a0b0',
+            }}>
+              {status === 'sent' && '✓'}
+              {status === 'delivered' && '✓✓'}
+              {status === 'read' && '✓✓'}
+            </span>
+          )}
         </div>
       </div>
     </div>
