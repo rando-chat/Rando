@@ -16,6 +16,11 @@ export function useChat(sessionId: string) {
   const [notifications, setNotifications] = useState<any[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   
+  // NEW: Partner left states
+  const [partnerLeft, setPartnerLeft] = useState(false)
+  const [leftAt, setLeftAt] = useState<string | null>(null)
+  const [endedBy, setEndedBy] = useState<string | null>(null)
+  
   const channelRef = useRef<any>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -25,6 +30,20 @@ export function useChat(sessionId: string) {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, 100)
+  }
+
+  // Add system message
+  const addSystemMessage = (content: string) => {
+    const systemMsg = {
+      id: `system-${Date.now()}`,
+      sender_id: 'system',
+      sender_display_name: '🔵 System',
+      content,
+      created_at: new Date().toISOString(),
+      is_system: true
+    }
+    setMessages(prev => [...prev, systemMsg])
+    scrollToBottom()
   }
 
   // ============================================
@@ -65,6 +84,7 @@ export function useChat(sessionId: string) {
         subscribeToTyping()
         subscribeToOnlineStatus()
         subscribeToNotifications()
+        subscribeToChatEnd() // NEW: Subscribe to chat end events
 
         // Mark messages as read
         markMessagesAsRead()
@@ -171,7 +191,7 @@ export function useChat(sessionId: string) {
   }
 
   // ============================================
-  // SUBSCRIBE TO REACTIONS (FIXED)
+  // SUBSCRIBE TO REACTIONS
   // ============================================
   const subscribeToReactions = () => {
     supabase
@@ -181,7 +201,6 @@ export function useChat(sessionId: string) {
         schema: 'public',
         table: 'message_reactions'
       }, async (payload) => {
-        // FIX: Use type assertion to access message_id
         const messageId = (payload.new as any)?.message_id || (payload.old as any)?.message_id
         
         if (messageId) {
@@ -254,10 +273,52 @@ export function useChat(sessionId: string) {
   }
 
   // ============================================
+  // NEW: SUBSCRIBE TO CHAT END EVENTS
+  // ============================================
+  const subscribeToChatEnd = () => {
+    if (!session || !guestSession) return
+    
+    const partnerId = session.user1_id === guestSession.guest_id 
+      ? session.user2_id 
+      : session.user1_id
+
+    const partnerName = session.user1_id === guestSession.guest_id 
+      ? session.user2_display_name 
+      : session.user1_display_name
+
+    supabase
+      .channel(`chat-end-${sessionId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_sessions',
+        filter: `id=eq.${sessionId}`
+      }, (payload) => {
+        if (payload.new.status === 'ended') {
+          const endedBy = payload.new.ended_by
+          const isPartner = endedBy === partnerId
+          
+          if (isPartner) {
+            setPartnerLeft(true)
+            setLeftAt(payload.new.ended_at)
+            setEndedBy(endedBy)
+            
+            // Add system message
+            addSystemMessage(`👋 ${partnerName} left the chat`)
+            
+            // Update online status
+            setIsOnline(false)
+          }
+        }
+      })
+      .subscribe()
+  }
+
+  // ============================================
   // SEND MESSAGE
   // ============================================
   const sendMessage = async (content: string) => {
-    if (!session || !guestSession || !content.trim()) return
+    if (!session || !guestSession || !content.trim() || partnerLeft) return
 
     setIsSending(true)
     try {
@@ -284,7 +345,7 @@ export function useChat(sessionId: string) {
   // SEND TYPING INDICATOR
   // ============================================
   const sendTyping = () => {
-    if (!guestSession) return
+    if (!guestSession || partnerLeft) return
 
     supabase
       .channel(`typing-${sessionId}`)
@@ -304,7 +365,7 @@ export function useChat(sessionId: string) {
   // ADD REACTION
   // ============================================
   const addReaction = async (messageId: string, emoji: string) => {
-    if (!guestSession) return
+    if (!guestSession || partnerLeft) return
 
     const { error } = await supabase
       .from('message_reactions')
@@ -326,7 +387,7 @@ export function useChat(sessionId: string) {
   // REMOVE REACTION
   // ============================================
   const removeReaction = async (messageId: string, emoji: string) => {
-    if (!guestSession) return
+    if (!guestSession || partnerLeft) return
 
     const { error } = await supabase
       .from('message_reactions')
@@ -447,7 +508,11 @@ export function useChat(sessionId: string) {
     try {
       await supabase
         .from('chat_sessions')
-        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .update({ 
+          status: 'ended', 
+          ended_at: new Date().toISOString(),
+          ended_by: guestSession?.guest_id 
+        })
         .eq('id', sessionId)
     } catch (err: any) {
       console.error('End chat error:', err)
@@ -503,6 +568,11 @@ export function useChat(sessionId: string) {
     isOnline,
     partnerId,
     partnerName,
+    
+    // NEW: Partner left info
+    partnerLeft,
+    leftAt,
+    endedBy,
     
     // Refs
     messagesEndRef,
