@@ -13,8 +13,9 @@ export function useMatchmaking() {
   const [queuePosition, setQueuePosition] = useState(1)
   const [usersInQueue, setUsersInQueue] = useState(0)
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const forceMatchRef = useRef<boolean>(false)
 
-  // Initialize guest session
+  // Initialize guest session and start background polling
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -22,6 +23,8 @@ export function useMatchmaking() {
         if (error) throw error
         if (data && data.length > 0) {
           setSession(data[0])
+          // Start background polling immediately
+          startBackgroundPolling()
         }
       } catch (err: any) {
         setError(err.message)
@@ -38,31 +41,79 @@ export function useMatchmaking() {
     }
   }, [])
 
-  const checkForMatch = async () => {
-    if (!session) return
+  // Background polling - checks queue but doesn't auto-join
+  const startBackgroundPolling = () => {
+    if (pollingRef.current) clearInterval(pollingRef.current)
+    
+    // Poll every 2 seconds for queue stats
+    pollingRef.current = setInterval(async () => {
+      if (!session) return
 
-    try {
-      // First, get queue stats for position calculation
-      const { data: allQueue } = await supabase
+      // Just get queue stats, don't match
+      const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
 
-      if (allQueue) {
-        setUsersInQueue(allQueue.length)
+      if (queue) {
+        setUsersInQueue(queue.length)
         
-        // Find user's position
-        const userIndex = allQueue.findIndex(u => u.user_id === session.guest_id)
+        // Find user's position if they're in queue
+        const userIndex = queue.findIndex(u => u.user_id === session.guest_id)
         if (userIndex !== -1) {
           setQueuePosition(userIndex + 1)
-          
-          // Update wait time based on position
-          const avgWaitPerPerson = 5 // seconds per person ahead
-          setEstimatedWait(Math.max(5, (userIndex) * avgWaitPerPerson))
+          setEstimatedWait(Math.max(5, userIndex * 5))
         }
       }
+    }, 2000)
+  }
 
+  // Force match - same as debug's force check
+  const forceMatch = async () => {
+    if (!session) {
+      setError('No session')
+      return
+    }
+
+    setIsLoading(true)
+    forceMatchRef.current = true
+    
+    try {
+      // Clean up any old entry
+      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
+
+      // Join queue
+      const { error } = await supabase.from('matchmaking_queue').insert({
+        user_id: session.guest_id,
+        display_name: session.display_name,
+        is_guest: true,
+        tier: 'free',
+        interests: [],
+        entered_at: new Date().toISOString()
+      })
+
+      if (error) throw error
+
+      setIsInQueue(true)
+      
+      // Run checkForMatch immediately and aggressively
+      await checkForMatch(true) // true = force mode
+
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+      forceMatchRef.current = false
+    }
+  }
+
+  // Enhanced checkForMatch with force mode
+  const checkForMatch = async (isForced = false) => {
+    if (!session) return
+    if (!isInQueue && !isForced) return
+
+    try {
       // ALWAYS check for existing session first
       const { data: existingSession } = await supabase
         .from('chat_sessions')
@@ -81,23 +132,29 @@ export function useMatchmaking() {
         return
       }
 
-      // Only check queue if we're supposed to be in it
-      if (!isInQueue) return
-
-      // Get ALL queue entries
+      // Get ALL queue entries (with force mode, get more)
+      const limit = isForced ? 50 : 20
       const { data: queue } = await supabase
         .from('matchmaking_queue')
         .select('*')
         .is('matched_at', null)
         .order('entered_at', { ascending: true })
+        .limit(limit)
 
       if (!queue || queue.length < 2) {
+        if (isForced) {
+          // If forced and no match, wait a bit and retry
+          setTimeout(() => checkForMatch(true), 200)
+        }
         return
       }
 
       // Find partner (not yourself)
       const partner = queue.find(u => u.user_id !== session.guest_id)
       if (!partner) {
+        if (isForced) {
+          setTimeout(() => checkForMatch(true), 200)
+        }
         return
       }
 
@@ -132,6 +189,9 @@ export function useMatchmaking() {
           setMatchFound(newSession)
           setIsInQueue(false)
         }
+      } else if (isForced) {
+        // If forced and we're not the creator, wait and retry
+        setTimeout(() => checkForMatch(true), 200)
       }
     } catch (err: any) {
       console.error('Check error:', err)
@@ -140,42 +200,8 @@ export function useMatchmaking() {
 
   const joinQueue = async () => {
     if (!session) return
-
-    setIsLoading(true)
-    try {
-      // Clean up old entry
-      await supabase.from('matchmaking_queue').delete().eq('user_id', session.guest_id)
-
-      // Join queue with all optional fields
-      const { error } = await supabase.from('matchmaking_queue').insert({
-        user_id: session.guest_id,
-        display_name: session.display_name,
-        is_guest: true,
-        tier: 'free',
-        interests: [],
-        language_preference: 'en',
-        looking_for: ['text'],
-        match_preferences: { min_age: 18, max_age: 99 },
-        queue_score: 50,
-        entered_at: new Date().toISOString(),
-        last_ping_at: new Date().toISOString()
-      })
-
-      if (error) throw error
-
-      setIsInQueue(true)
-      setEstimatedWait(30)
-
-      // Start polling (500ms for fast matching)
-      if (pollingRef.current) clearInterval(pollingRef.current)
-      setTimeout(() => checkForMatch(), 100)
-      pollingRef.current = setInterval(checkForMatch, 500)
-
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setIsLoading(false)
-    }
+    // This now just calls forceMatch
+    await forceMatch()
   }
 
   const leaveQueue = async () => {
@@ -190,21 +216,22 @@ export function useMatchmaking() {
     setEstimatedWait(30)
     setQueuePosition(1)
     setUsersInQueue(0)
+    
+    // Restart background polling
+    startBackgroundPolling()
   }
-
-  // ... rest of your functions (sendMessage, uploadImage, etc.)
 
   return {
     session,
     isInQueue,
     estimatedWait,
     matchFound,
-    joinQueue,
+    joinQueue, // Now calls forceMatch
+    forceMatch, // Expose force match directly
     leaveQueue,
     isLoading,
     error,
     queuePosition,
     usersInQueue,
-    // ... other returns
   }
 }
