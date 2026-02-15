@@ -171,7 +171,7 @@ export function useChat(sessionId: string) {
   }
 
   // ============================================
-  // SUBSCRIBE TO REACTIONS
+  // SUBSCRIBE TO REACTIONS (FIXED)
   // ============================================
   const subscribeToReactions = () => {
     supabase
@@ -181,8 +181,9 @@ export function useChat(sessionId: string) {
         schema: 'public',
         table: 'message_reactions'
       }, async (payload) => {
-        // Refresh reactions for affected message
-        const messageId = payload.new?.message_id || payload.old?.message_id
+        // FIX: Use type assertion to access message_id
+        const messageId = (payload.new as any)?.message_id || (payload.old as any)?.message_id
+        
         if (messageId) {
           const { data } = await supabase
             .rpc('get_message_reactions', { p_message_id: messageId })
