@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 export function useChat(sessionId: string) {
   const [messages, setMessages] = useState<any[]>([])
   const [guestSession, setGuestSession] = useState<any>(null)
+  const [partnerName, setPartnerName] = useState('')  // KEEP THIS
   const [myName, setMyName] = useState('')
   const [partnerLeft, setPartnerLeft] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
@@ -35,6 +36,24 @@ export function useChat(sessionId: string) {
 
     const loadMessages = async () => {
       setLoading(true)
+
+      // Get session to know partner name
+      const { data: session } = await supabase
+        .from('chat_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single()
+
+      if (session) {
+        // Set partner name based on who the current user is
+        if (session.user1_id === guestSession.guest_id) {
+          setPartnerName(session.user2_display_name)
+          setMyName(session.user1_display_name)
+        } else {
+          setPartnerName(session.user1_display_name)
+          setMyName(session.user2_display_name)
+        }
+      }
 
       // Load messages
       const { data: messagesData } = await supabase
@@ -258,6 +277,7 @@ export function useChat(sessionId: string) {
   return {
     messages,
     guestSession,
+    partnerName,  // KEEP THIS
     myName,
     partnerLeft,
     isTyping,
