@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useChat } from '@/hooks/useChat'
 import toast from 'react-hot-toast'
-import { formatDistanceToNow, format } from 'date-fns'
-
 
 export default function ChatPage({ params }: { params: { id: string } }) {
   const sessionId = params.id
@@ -35,6 +33,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     isOnline,
     partnerId,
     partnerName,
+    partnerLeft,
+    leftAt,
     messagesEndRef,
   } = useChat(sessionId)
   
@@ -52,6 +52,17 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0)
 
+  // Auto-redirect when partner leaves
+  useEffect(() => {
+    if (partnerLeft) {
+      const timer = setTimeout(() => {
+        router.push('/matchmaking')
+      }, 5000) // Redirect after 5 seconds
+      
+      return () => clearTimeout(timer)
+    }
+  }, [partnerLeft, router])
+
   // Handle resize for responsiveness
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth)
@@ -68,7 +79,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   // SEND MESSAGE HANDLER
   // ============================================
   const handleSendMessage = async () => {
-    if (!messageInput.trim()) return
+    if (!messageInput.trim() || partnerLeft) return
     await sendMessage(messageInput)
     setMessageInput('')
   }
@@ -77,14 +88,16 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   // TYPING HANDLER
   // ============================================
   const handleTyping = () => {
-    sendTyping()
+    if (!partnerLeft) {
+      sendTyping()
+    }
   }
 
   // ============================================
   // IMAGE UPLOAD
   // ============================================
   const uploadImage = async (file: File) => {
-    if (!session || !guestSession) return
+    if (!session || !guestSession || partnerLeft) return
 
     setUploading(true)
     try {
@@ -128,6 +141,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   // REACTION HANDLERS
   // ============================================
   const handleReaction = (messageId: string, emoji: string) => {
+    if (partnerLeft) return
+    
     const userReactions = messageReactions[messageId] || {}
     const hasReacted = Object.keys(userReactions).includes(emoji)
     
@@ -453,14 +468,16 @@ export default function ChatPage({ params }: { params: { id: string } }) {
               }}>
                 💬 {partnerName}
               </h1>
-              <span style={{
-                display: 'inline-block',
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: isOnline ? '#10b981' : '#9ca3af',
-                animation: isOnline ? 'pulse 2s infinite' : 'none'
-              }} />
+              {!partnerLeft && (
+                <span style={{
+                  display: 'inline-block',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: isOnline ? '#10b981' : '#9ca3af',
+                  animation: isOnline ? 'pulse 2s infinite' : 'none'
+                }} />
+              )}
               <style>{`
                 @keyframes pulse {
                   0% { opacity: 1; }
@@ -480,7 +497,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
               }}>
                 You: {guestSession.display_name}
               </p>
-              {isTyping && (
+              {isTyping && !partnerLeft && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                   <span style={{ fontSize: '12px', color: '#667eea' }}>typing</span>
                   <div style={{ display: 'flex', gap: '2px' }}>
@@ -489,6 +506,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                     <span style={{ animation: 'typing 1s infinite 0.4s' }}>.</span>
                   </div>
                 </div>
+              )}
+              {partnerLeft && (
+                <span style={{ fontSize: '12px', color: '#ef4444' }}>• Left the chat</span>
               )}
             </div>
           </div>
@@ -530,87 +550,89 @@ export default function ChatPage({ params }: { params: { id: string } }) {
               </button>
             </div>
 
-            {/* Menu */}
-            <div style={{ position: 'relative' }}>
-              <button 
-                onClick={() => setShowMenu(!showMenu)}
-                style={{ 
-                  padding: isMobile ? '6px' : '8px', 
-                  background: '#f3f4f6', 
-                  border: 'none', 
-                  borderRadius: '6px', 
-                  cursor: 'pointer',
-                  fontSize: isMobile ? '16px' : '18px'
-                }}
-              >
-                ⋮
-              </button>
-              
-              {showMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '4px',
-                  background: 'white',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                  border: '1px solid #e5e7eb',
-                  minWidth: '180px',
-                  zIndex: 100
-                }}>
-                  <button
-                    onClick={handleAddFriend}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      border: 'none',
-                      background: 'none',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid #e5e7eb',
-                      fontSize: isMobile ? '14px' : '15px'
-                    }}
-                  >
-                    ➕ Add Friend
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowReport(true)
-                      setShowMenu(false)
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      border: 'none',
-                      background: 'none',
-                      cursor: 'pointer',
-                      borderBottom: '1px solid #e5e7eb',
-                      fontSize: isMobile ? '14px' : '15px',
-                      color: '#f59e0b'
-                    }}
-                  >
-                    ⚠️ Report
-                  </button>
-                  <button
-                    onClick={handleBlock}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      textAlign: 'left',
-                      border: 'none',
-                      background: 'none',
-                      cursor: 'pointer',
-                      fontSize: isMobile ? '14px' : '15px',
-                      color: '#ef4444'
-                    }}
-                  >
-                    🚫 Block User
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Menu - Hide if partner left */}
+            {!partnerLeft && (
+              <div style={{ position: 'relative' }}>
+                <button 
+                  onClick={() => setShowMenu(!showMenu)}
+                  style={{ 
+                    padding: isMobile ? '6px' : '8px', 
+                    background: '#f3f4f6', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    cursor: 'pointer',
+                    fontSize: isMobile ? '16px' : '18px'
+                  }}
+                >
+                  ⋮
+                </button>
+                
+                {showMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '4px',
+                    background: 'white',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    border: '1px solid #e5e7eb',
+                    minWidth: '180px',
+                    zIndex: 100
+                  }}>
+                    <button
+                      onClick={handleAddFriend}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #e5e7eb',
+                        fontSize: isMobile ? '14px' : '15px'
+                      }}
+                    >
+                      ➕ Add Friend
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowReport(true)
+                        setShowMenu(false)
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #e5e7eb',
+                        fontSize: isMobile ? '14px' : '15px',
+                        color: '#f59e0b'
+                      }}
+                    >
+                      ⚠️ Report
+                    </button>
+                    <button
+                      onClick={handleBlock}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        fontSize: isMobile ? '14px' : '15px',
+                        color: '#ef4444'
+                      }}
+                    >
+                      🚫 Block User
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             
             <button 
               onClick={handleEndChat} 
@@ -653,10 +675,35 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         ) : (
           messages.map((msg, i) => {
             const isMe = msg.sender_id === guestSession.guest_id
-            const isImage = msg.content.startsWith('📷 Image:')
+            const isSystem = msg.sender_id === 'system'
+            const isImage = msg.content?.startsWith('📷 Image:')
             const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
             const reactions = messageReactions[msg.id] || {}
             const hasReactions = Object.keys(reactions).length > 0
+
+            if (isSystem) {
+              return (
+                <div key={msg.id || i} style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center',
+                  width: '100%',
+                  margin: '8px 0'
+                }}>
+                  <div style={{
+                    background: '#f3f4f6',
+                    borderRadius: '20px',
+                    padding: '8px 16px',
+                    fontSize: isMobile ? '12px' : '13px',
+                    color: '#6b7280',
+                    maxWidth: '80%',
+                    textAlign: 'center',
+                    border: '1px dashed #9ca3af'
+                  }}>
+                    {msg.content}
+                  </div>
+                </div>
+              )
+            }
 
             return (
               <div key={msg.id || i} style={{ 
@@ -666,7 +713,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 width: '100%',
                 position: 'relative'
               }}
-              onMouseEnter={() => !isMe && setReactionPicker(msg.id)}
+              onMouseEnter={() => !isMe && !partnerLeft && setReactionPicker(msg.id)}
               onMouseLeave={() => setReactionPicker(null)}
               >
                 <div style={{ 
@@ -731,18 +778,20 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                       {Object.entries(reactions).map(([emoji, count]) => (
                         <button
                           key={emoji}
-                          onClick={() => handleReaction(msg.id, emoji)}
+                          onClick={() => !partnerLeft && handleReaction(msg.id, emoji)}
                           style={{
                             border: '1px solid #e5e7eb',
                             background: 'white',
                             borderRadius: '12px',
                             padding: '2px 6px',
                             fontSize: '12px',
-                            cursor: 'pointer',
+                            cursor: partnerLeft ? 'default' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '2px'
+                            gap: '2px',
+                            opacity: partnerLeft ? 0.5 : 1
                           }}
+                          disabled={partnerLeft}
                         >
                           {emoji} {count as number > 1 && <span style={{ fontSize: '10px', color: '#6b7280' }}>{count as number}</span>}
                         </button>
@@ -751,7 +800,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                   )}
                   
                   {/* Reaction picker */}
-                  {reactionPicker === msg.id && !isMe && (
+                  {reactionPicker === msg.id && !isMe && !partnerLeft && (
                     <div style={{
                       position: 'absolute',
                       top: '0',
@@ -793,174 +842,220 @@ export default function ChatPage({ params }: { params: { id: string } }) {
             )
           })
         )}
+
+        {/* Partner left indicator */}
+        {partnerLeft && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%',
+            margin: '16px 0'
+          }}>
+            <div style={{
+              background: '#f3f4f6',
+              borderRadius: '20px',
+              padding: '12px 24px',
+              textAlign: 'center',
+              border: '1px dashed #9ca3af',
+              maxWidth: '80%'
+            }}>
+              <p style={{ 
+                color: '#6b7280', 
+                fontSize: isMobile ? '13px' : '14px',
+                margin: 0
+              }}>
+                👋 {partnerName} left the chat
+              </p>
+              {leftAt && (
+                <p style={{ 
+                  fontSize: isMobile ? '10px' : '11px', 
+                  color: '#9ca3af',
+                  margin: '4px 0 0 0'
+                }}>
+                  Left at {new Date(leftAt).toLocaleTimeString()}
+                </p>
+              )}
+              <p style={{ 
+                fontSize: isMobile ? '10px' : '11px', 
+                color: '#667eea',
+                margin: '8px 0 0 0'
+              }}>
+                Redirecting to matchmaking in 5 seconds...
+              </p>
+            </div>
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div style={{ 
-        padding: isMobile ? '12px' : '16px', 
-        background: 'white', 
-        borderTop: '1px solid #e5e7eb', 
-        position: 'relative'
-      }}>
-        {/* Emoji picker */}
-        {showEmojiPicker && (
-          <div style={{ 
-            position: 'absolute', 
-            bottom: '100%', 
-            left: isMobile ? '8px' : '16px', 
-            right: isMobile ? '8px' : 'auto',
-            background: 'white', 
-            borderRadius: '12px', 
-            padding: isMobile ? '8px' : '12px', 
-            boxShadow: '0 -4px 12px rgba(0,0,0,0.1)', 
-            border: '1px solid #e5e7eb', 
-            marginBottom: '8px', 
-            display: 'grid', 
-            gridTemplateColumns: `repeat(${isMobile ? 4 : 6}, 1fr)`, 
-            gap: isMobile ? '4px' : '8px',
-            maxWidth: isMobile ? 'calc(100% - 16px)' : 'auto',
-            zIndex: 10
-          }}>
-            {emojis.map(emoji => (
-              <button 
-                key={emoji} 
-                onClick={() => { 
-                  setMessageInput(prev => prev + emoji); 
-                  setShowEmojiPicker(false); 
-                }} 
-                style={{ 
-                  width: isMobile ? '36px' : '40px', 
-                  height: isMobile ? '36px' : '40px', 
-                  fontSize: isMobile ? '18px' : '20px', 
-                  border: 'none', 
-                  background: '#f3f4f6', 
-                  borderRadius: '8px', 
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
-
+      {/* Input - Hide if partner left */}
+      {!partnerLeft && (
         <div style={{ 
-          display: 'flex', 
-          gap: isMobile ? '6px' : '8px', 
-          alignItems: 'center',
-          flexWrap: 'wrap'
+          padding: isMobile ? '12px' : '16px', 
+          background: 'white', 
+          borderTop: '1px solid #e5e7eb', 
+          position: 'relative'
         }}>
-          <button 
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
-            style={{ 
-              padding: isMobile ? '10px' : '12px', 
-              background: '#f3f4f6', 
-              border: 'none', 
-              borderRadius: '8px', 
-              cursor: 'pointer', 
-              fontSize: isMobile ? '18px' : '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: isMobile ? '40px' : '44px',
-              height: isMobile ? '40px' : '44px'
-            }}
-          >
-            😊
-          </button>
-          
-          <input
-            value={messageInput}
-            onChange={(e) => {
-              setMessageInput(e.target.value)
-              handleTyping()
-            }}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            placeholder="Type a message..."
-            style={{ 
-              flex: 1,
-              minWidth: isMobile ? '120px' : '200px',
-              padding: isMobile ? '10px 12px' : '12px 16px', 
+          {/* Emoji picker */}
+          {showEmojiPicker && (
+            <div style={{ 
+              position: 'absolute', 
+              bottom: '100%', 
+              left: isMobile ? '8px' : '16px', 
+              right: isMobile ? '8px' : 'auto',
+              background: 'white', 
+              borderRadius: '12px', 
+              padding: isMobile ? '8px' : '12px', 
+              boxShadow: '0 -4px 12px rgba(0,0,0,0.1)', 
               border: '1px solid #e5e7eb', 
-              borderRadius: '24px', 
-              fontSize: isMobile ? '14px' : '15px', 
-              outline: 'none'
-            }}
-          />
-          
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileSelect} 
-            accept="image/*" 
-            style={{ display: 'none' }} 
-          />
-          
-          <button 
-            onClick={() => fileInputRef.current?.click()} 
-            disabled={uploading} 
-            style={{ 
-              padding: isMobile ? '10px' : '12px', 
-              background: uploading ? '#9ca3af' : '#f3f4f6', 
-              border: 'none', 
-              borderRadius: '8px', 
-              cursor: uploading ? 'not-allowed' : 'pointer', 
-              fontSize: isMobile ? '18px' : '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minWidth: isMobile ? '40px' : '44px',
-              height: isMobile ? '40px' : '44px',
-              opacity: uploading ? 0.7 : 1
-            }}
-          >
-            📷
-          </button>
-          
-          <button 
-            onClick={handleSendMessage} 
-            disabled={!messageInput.trim() || isSending} 
-            style={{ 
-              padding: isMobile ? '10px 16px' : '12px 24px', 
-              background: messageInput.trim() && !isSending ? '#667eea' : '#e5e7eb', 
-              color: messageInput.trim() && !isSending ? 'white' : '#9ca3af', 
-              border: 'none', 
-              borderRadius: '24px', 
-              cursor: messageInput.trim() && !isSending ? 'pointer' : 'not-allowed', 
-              fontWeight: 600, 
-              fontSize: isMobile ? '14px' : '15px',
-              whiteSpace: 'nowrap',
-              boxShadow: messageInput.trim() && !isSending ? '0 4px 12px rgba(102,126,234,0.4)' : 'none',
-              minWidth: isMobile ? '60px' : '70px'
-            }}
-          >
-            {isSending ? '...' : 'Send'}
-          </button>
-        </div>
-        
-        {/* Uploading indicator */}
-        {uploading && (
+              marginBottom: '8px', 
+              display: 'grid', 
+              gridTemplateColumns: `repeat(${isMobile ? 4 : 6}, 1fr)`, 
+              gap: isMobile ? '4px' : '8px',
+              maxWidth: isMobile ? 'calc(100% - 16px)' : 'auto',
+              zIndex: 10
+            }}>
+              {emojis.map(emoji => (
+                <button 
+                  key={emoji} 
+                  onClick={() => { 
+                    setMessageInput(prev => prev + emoji); 
+                    setShowEmojiPicker(false); 
+                  }} 
+                  style={{ 
+                    width: isMobile ? '36px' : '40px', 
+                    height: isMobile ? '36px' : '40px', 
+                    fontSize: isMobile ? '18px' : '20px', 
+                    border: 'none', 
+                    background: '#f3f4f6', 
+                    borderRadius: '8px', 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div style={{ 
-            position: 'absolute', 
-            bottom: '100%', 
-            left: '50%', 
-            transform: 'translateX(-50%)',
-            background: '#1f2937', 
-            color: 'white', 
-            padding: '4px 12px', 
-            borderRadius: '20px', 
-            fontSize: '12px',
-            marginBottom: '8px',
-            whiteSpace: 'nowrap'
+            display: 'flex', 
+            gap: isMobile ? '6px' : '8px', 
+            alignItems: 'center',
+            flexWrap: 'wrap'
           }}>
-            📤 Uploading image...
+            <button 
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
+              style={{ 
+                padding: isMobile ? '10px' : '12px', 
+                background: '#f3f4f6', 
+                border: 'none', 
+                borderRadius: '8px', 
+                cursor: 'pointer', 
+                fontSize: isMobile ? '18px' : '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: isMobile ? '40px' : '44px',
+                height: isMobile ? '40px' : '44px'
+              }}
+            >
+              😊
+            </button>
+            
+            <input
+              value={messageInput}
+              onChange={(e) => {
+                setMessageInput(e.target.value)
+                handleTyping()
+              }}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="Type a message..."
+              style={{ 
+                flex: 1,
+                minWidth: isMobile ? '120px' : '200px',
+                padding: isMobile ? '10px 12px' : '12px 16px', 
+                border: '1px solid #e5e7eb', 
+                borderRadius: '24px', 
+                fontSize: isMobile ? '14px' : '15px', 
+                outline: 'none'
+              }}
+            />
+            
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileSelect} 
+              accept="image/*" 
+              style={{ display: 'none' }} 
+            />
+            
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              disabled={uploading} 
+              style={{ 
+                padding: isMobile ? '10px' : '12px', 
+                background: uploading ? '#9ca3af' : '#f3f4f6', 
+                border: 'none', 
+                borderRadius: '8px', 
+                cursor: uploading ? 'not-allowed' : 'pointer', 
+                fontSize: isMobile ? '18px' : '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: isMobile ? '40px' : '44px',
+                height: isMobile ? '40px' : '44px',
+                opacity: uploading ? 0.7 : 1
+              }}
+            >
+              📷
+            </button>
+            
+            <button 
+              onClick={handleSendMessage} 
+              disabled={!messageInput.trim() || isSending} 
+              style={{ 
+                padding: isMobile ? '10px 16px' : '12px 24px', 
+                background: messageInput.trim() && !isSending ? '#667eea' : '#e5e7eb', 
+                color: messageInput.trim() && !isSending ? 'white' : '#9ca3af', 
+                border: 'none', 
+                borderRadius: '24px', 
+                cursor: messageInput.trim() && !isSending ? 'pointer' : 'not-allowed', 
+                fontWeight: 600, 
+                fontSize: isMobile ? '14px' : '15px',
+                whiteSpace: 'nowrap',
+                boxShadow: messageInput.trim() && !isSending ? '0 4px 12px rgba(102,126,234,0.4)' : 'none',
+                minWidth: isMobile ? '60px' : '70px'
+              }}
+            >
+              {isSending ? '...' : 'Send'}
+            </button>
           </div>
-        )}
-      </div>
+          
+          {/* Uploading indicator */}
+          {uploading && (
+            <div style={{ 
+              position: 'absolute', 
+              bottom: '100%', 
+              left: '50%', 
+              transform: 'translateX(-50%)',
+              background: '#1f2937', 
+              color: 'white', 
+              padding: '4px 12px', 
+              borderRadius: '20px', 
+              fontSize: '12px',
+              marginBottom: '8px',
+              whiteSpace: 'nowrap'
+            }}>
+              📤 Uploading image...
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
