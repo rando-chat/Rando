@@ -21,7 +21,6 @@ interface Friend {
   friend_name: string
   status: 'pending' | 'accepted' | 'rejected'
   created_at: string
-  is_online?: boolean
 }
 
 export function ChatSidebar({
@@ -40,7 +39,6 @@ export function ChatSidebar({
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'info'>('info')
 
-  // Load friends when sidebar opens
   useEffect(() => {
     if (isOpen && guestId) {
       loadFriends()
@@ -52,133 +50,88 @@ export function ChatSidebar({
     if (!guestId) return
     setLoading(true)
 
-    try {
-      // Get accepted friends
-      const { data, error } = await supabase
-        .from('friends')
-        .select(`
-          id,
-          friend_id,
-          status,
-          created_at,
-          friend:guest_sessions!friend_id(display_name)
-        `)
-        .eq('user_id', guestId)
-        .eq('status', 'accepted')
-        .order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('friends')
+      .select(`
+        id,
+        friend_id,
+        status,
+        created_at,
+        friend:guest_sessions!friend_id(display_name)
+      `)
+      .eq('user_id', guestId)
+      .eq('status', 'accepted')
+      .order('created_at', { ascending: false })
 
-      if (error) throw error
-
-      const formattedFriends = data?.map(f => ({
+    if (data) {
+      const formattedFriends = data.map(f => ({
         id: f.id,
         friend_id: f.friend_id,
         friend_name: f.friend?.[0]?.display_name || 'Unknown',
         status: f.status,
         created_at: f.created_at,
-        is_online: false // We'll add real-time presence later
-      })) || []
-
+      }))
       setFriends(formattedFriends)
-
-    } catch (err) {
-      console.error('Error loading friends:', err)
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   const loadPendingRequests = async () => {
     if (!guestId) return
 
-    try {
-      // Get pending requests WHERE this user is the friend_id (someone added them)
-      const { data, error } = await supabase
-        .from('friends')
-        .select(`
-          id,
-          user_id,
-          status,
-          created_at,
-          requester:guest_sessions!user_id(display_name)
-        `)
-        .eq('friend_id', guestId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('friends')
+      .select(`
+        id,
+        user_id,
+        status,
+        created_at,
+        requester:guest_sessions!user_id(display_name)
+      `)
+      .eq('friend_id', guestId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
 
-      if (error) throw error
-
-      const formattedRequests = data?.map(r => ({
+    if (data) {
+      const formattedRequests = data.map(r => ({
         id: r.id,
         friend_id: r.user_id,
         friend_name: r.requester?.[0]?.display_name || 'Unknown',
         status: r.status,
         created_at: r.created_at
-      })) || []
-
+      }))
       setPendingRequests(formattedRequests)
-
-    } catch (err) {
-      console.error('Error loading requests:', err)
     }
   }
 
   const acceptRequest = async (requestId: string) => {
-    try {
-      const { error } = await supabase
-        .from('friends')
-        .update({ status: 'accepted' })
-        .eq('id', requestId)
-
-      if (error) throw error
-
-      // Refresh lists
-      await loadFriends()
-      await loadPendingRequests()
-
-    } catch (err) {
-      console.error('Error accepting request:', err)
-    }
+    await supabase
+      .from('friends')
+      .update({ status: 'accepted' })
+      .eq('id', requestId)
+    await loadFriends()
+    await loadPendingRequests()
   }
 
   const rejectRequest = async (requestId: string) => {
-    try {
-      const { error } = await supabase
-        .from('friends')
-        .update({ status: 'rejected' })
-        .eq('id', requestId)
-
-      if (error) throw error
-
-      await loadPendingRequests()
-
-    } catch (err) {
-      console.error('Error rejecting request:', err)
-    }
+    await supabase
+      .from('friends')
+      .update({ status: 'rejected' })
+      .eq('id', requestId)
+    await loadPendingRequests()
   }
 
   const removeFriend = async (friendId: string) => {
     if (!confirm('Remove this friend?')) return
-
-    try {
-      const { error } = await supabase
-        .from('friends')
-        .delete()
-        .eq('id', friendId)
-
-      if (error) throw error
-
-      await loadFriends()
-
-    } catch (err) {
-      console.error('Error removing friend:', err)
-    }
+    await supabase.from('friends').delete().eq('id', friendId)
+    await loadFriends()
   }
 
   if (!isOpen) return null
 
   return (
     <div style={{
-      position: 'fixed' as const,
+      position: 'fixed',
       top: 0,
       right: 0,
       bottom: 0,
@@ -187,7 +140,7 @@ export function ChatSidebar({
       borderLeft: '1px solid rgba(124,58,237,0.2)',
       zIndex: 100,
       display: 'flex',
-      flexDirection: 'column' as const,
+      flexDirection: 'column',
       animation: 'slideIn 0.3s ease',
       boxShadow: '-5px 0 30px rgba(0,0,0,0.5)',
     }}>
@@ -260,7 +213,6 @@ export function ChatSidebar({
             color: activeTab === 'friends' ? '#7c3aed' : '#a0a0b0',
             cursor: 'pointer',
             fontSize: '14px',
-            position: 'relative' as const,
           }}
         >
           Friends {friends.length > 0 && `(${friends.length})`}
@@ -276,20 +228,18 @@ export function ChatSidebar({
             color: activeTab === 'requests' ? '#7c3aed' : '#a0a0b0',
             cursor: 'pointer',
             fontSize: '14px',
-            position: 'relative' as const,
           }}
         >
           Requests
           {pendingRequests.length > 0 && (
             <span style={{
               position: 'absolute',
-              top: '8px',
-              right: '20px',
               background: '#ef4444',
               color: 'white',
               fontSize: '10px',
               padding: '2px 6px',
               borderRadius: '10px',
+              marginLeft: '8px',
             }}>
               {pendingRequests.length}
             </span>
@@ -300,19 +250,18 @@ export function ChatSidebar({
       {/* Content */}
       <div style={{
         flex: 1,
-        overflowY: 'auto' as const,
+        overflowY: 'auto',
         padding: '16px',
       }}>
         {/* INFO TAB */}
         {activeTab === 'info' && (
           <>
-            {/* Current Chat Partner */}
             <div style={{
               background: 'rgba(124,58,237,0.1)',
               borderRadius: '12px',
               padding: '20px',
               marginBottom: '24px',
-              textAlign: 'center' as const,
+              textAlign: 'center',
             }}>
               <div style={{
                 width: '60px',
@@ -336,15 +285,12 @@ export function ChatSidebar({
               }}>
                 {partnerName}
               </h4>
-              <p style={{ fontSize: '12px', color: '#22c55e', marginBottom: '16px' }}>
-                ● Online
-              </p>
 
-              {/* Stats */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gap: '12px',
+                marginTop: '16px',
               }}>
                 <div style={{
                   background: 'rgba(255,255,255,0.03)',
@@ -367,29 +313,22 @@ export function ChatSidebar({
               </div>
             </div>
 
-            {/* Actions */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button
                 onClick={onAddFriend}
                 style={actionButtonStyle}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(124,58,237,0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 ➕ Add {partnerName} as Friend
               </button>
               <button
                 onClick={onReport}
                 style={actionButtonStyle}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(124,58,237,0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 ⚠️ Report User
               </button>
               <button
                 onClick={onBlock}
                 style={{...actionButtonStyle, color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)'}}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 🚫 Block User
               </button>
@@ -409,11 +348,7 @@ export function ChatSidebar({
               Your Friends
             </h4>
 
-            {loading && (
-              <div style={{ textAlign: 'center', color: '#60607a', padding: '20px' }}>
-                Loading...
-              </div>
-            )}
+            {loading && <div style={{ textAlign: 'center', color: '#60607a' }}>Loading...</div>}
 
             {!loading && friends.length === 0 && (
               <div style={{
@@ -425,57 +360,24 @@ export function ChatSidebar({
               }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}>👥</div>
                 <p>No friends yet</p>
-                <p style={{ fontSize: '12px', marginTop: '8px' }}>
-                  Add friends during chat to see them here
-                </p>
               </div>
             )}
 
             {friends.map(friend => (
-              <div key={friend.id} style={{
-                background: 'rgba(255,255,255,0.03)',
-                borderRadius: '10px',
-                padding: '12px',
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}>
+              <div key={friend.id} style={friendItemStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                  }}>
+                  <div style={friendAvatarStyle}>
                     {friend.friend_name[0]?.toUpperCase()}
                   </div>
                   <div>
                     <div style={{ color: '#f0f0f0', fontWeight: 500 }}>
                       {friend.friend_name}
                     </div>
-                    <div style={{
-                      fontSize: '11px',
-                      color: friend.is_online ? '#22c55e' : '#60607a',
-                    }}>
-                      {friend.is_online ? '● Online' : 'Offline'}
-                    </div>
                   </div>
                 </div>
                 <button
                   onClick={() => removeFriend(friend.id)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#ef4444',
-                    fontSize: '18px',
-                    cursor: 'pointer',
-                    padding: '4px 8px',
-                  }}
+                  style={removeButtonStyle}
                 >
                   ✕
                 </button>
@@ -510,23 +412,9 @@ export function ChatSidebar({
             )}
 
             {pendingRequests.map(request => (
-              <div key={request.id} style={{
-                background: 'rgba(124,58,237,0.1)',
-                borderRadius: '10px',
-                padding: '12px',
-                marginBottom: '8px',
-              }}>
+              <div key={request.id} style={requestItemStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                  }}>
+                  <div style={friendAvatarStyle}>
                     {request.friend_name[0]?.toUpperCase()}
                   </div>
                   <div>
@@ -541,31 +429,13 @@ export function ChatSidebar({
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     onClick={() => acceptRequest(request.id)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                      border: 'none',
-                      borderRadius: '6px',
-                      color: 'white',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                    }}
+                    style={acceptButtonStyle}
                   >
                     Accept
                   </button>
                   <button
                     onClick={() => rejectRequest(request.id)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: 'transparent',
-                      border: '1px solid rgba(239,68,68,0.3)',
-                      borderRadius: '6px',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                    }}
+                    style={rejectButtonStyle}
                   >
                     Reject
                   </button>
@@ -597,4 +467,63 @@ const actionButtonStyle = {
   textAlign: 'left' as const,
   cursor: 'pointer',
   transition: 'all 0.2s ease',
+}
+
+const friendItemStyle = {
+  background: 'rgba(255,255,255,0.03)',
+  borderRadius: '10px',
+  padding: '12px',
+  marginBottom: '8px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+}
+
+const friendAvatarStyle = {
+  width: '40px',
+  height: '40px',
+  borderRadius: '50%',
+  background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'white',
+}
+
+const removeButtonStyle = {
+  background: 'transparent',
+  border: 'none',
+  color: '#ef4444',
+  fontSize: '18px',
+  cursor: 'pointer',
+  padding: '4px 8px',
+}
+
+const requestItemStyle = {
+  background: 'rgba(124,58,237,0.1)',
+  borderRadius: '10px',
+  padding: '12px',
+  marginBottom: '8px',
+}
+
+const acceptButtonStyle = {
+  flex: 1,
+  padding: '8px',
+  background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+  border: 'none',
+  borderRadius: '6px',
+  color: 'white',
+  cursor: 'pointer',
+  fontSize: '13px',
+}
+
+const rejectButtonStyle = {
+  flex: 1,
+  padding: '8px',
+  background: 'transparent',
+  border: '1px solid rgba(239,68,68,0.3)',
+  borderRadius: '6px',
+  color: '#ef4444',
+  cursor: 'pointer',
+  fontSize: '13px',
 }
