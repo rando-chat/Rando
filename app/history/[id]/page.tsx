@@ -30,7 +30,7 @@ export default function HistoryDetailPage({ params }: { params: Promise<{ id: st
                   isMe={msg.sender_id === user?.id}
                   timestamp={msg.created_at}
                   status={msg.read_by_recipient ? 'read' : 'delivered'}
-                  reactions={msg.reactions || {}}
+                  // reactions={msg.reactions || {}}  // ❌ REMOVE THIS LINE
                 />
               ))}
             </div>
