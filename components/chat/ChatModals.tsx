@@ -37,7 +37,6 @@ export function ChatModals({
   const [reportReason, setReportReason] = useState('')
   const [reportCategory, setReportCategory] = useState('other')
 
-  // Report Modal
   if (showReport) {
     return (
       <div style={modalOverlayStyle} onClick={onCloseReport}>
@@ -47,16 +46,7 @@ export function ChatModals({
           <select
             value={reportCategory}
             onChange={(e) => setReportCategory(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(124,58,237,0.2)',
-              borderRadius: '8px',
-              color: '#f0f0f0',
-              marginBottom: '16px',
-              fontSize: 'clamp(14px, 3.5vw, 15px)',
-            }}
+            style={selectStyle}
           >
             {REPORT_CATEGORIES.map(cat => (
               <option key={cat} value={cat} style={{ background: '#0a0a0f' }}>
@@ -69,18 +59,7 @@ export function ChatModals({
             value={reportReason}
             onChange={(e) => setReportReason(e.target.value)}
             placeholder="Why are you reporting this user?"
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(124,58,237,0.2)',
-              borderRadius: '8px',
-              color: '#f0f0f0',
-              marginBottom: '16px',
-              minHeight: '100px',
-              fontSize: 'clamp(14px, 3.5vw, 15px)',
-              resize: 'vertical',
-            }}
+            style={textareaStyle}
           />
           
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -103,7 +82,6 @@ export function ChatModals({
     )
   }
 
-  // Image Viewer Modal
   if (selectedImage) {
     return (
       <div style={modalOverlayStyle} onClick={onCloseImage}>
@@ -121,7 +99,6 @@ export function ChatModals({
     )
   }
 
-  // Image Editor Modal
   if (editImage) {
     return (
       <div style={modalOverlayStyle} onClick={onCloseEdit}>
@@ -143,12 +120,10 @@ export function ChatModals({
             </button>
             <button
               onClick={() => {
-                // Convert the preview URL back to a file
                 fetch(editImage)
                   .then(res => res.blob())
                   .then(blob => {
                     const file = new File([blob], 'image.jpg', { type: 'image/jpeg' })
-                    console.log('📷 Sending image file:', file)
                     onSendEdit(file)
                   })
               }}
@@ -198,6 +173,30 @@ const modalTitleStyle = {
   color: '#f0f0f0',
   marginBottom: '20px',
   fontFamily: "'Georgia', serif",
+}
+
+const selectStyle = {
+  width: '100%',
+  padding: '12px',
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(124,58,237,0.2)',
+  borderRadius: '8px',
+  color: '#f0f0f0',
+  marginBottom: '16px',
+  fontSize: 'clamp(14px, 3.5vw, 15px)',
+}
+
+const textareaStyle = {
+  width: '100%',
+  padding: '12px',
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(124,58,237,0.2)',
+  borderRadius: '8px',
+  color: '#f0f0f0',
+  marginBottom: '16px',
+  minHeight: '100px',
+  fontSize: 'clamp(14px, 3.5vw, 15px)',
+  resize: 'vertical' as const,
 }
 
 const modalCancelButtonStyle = {
