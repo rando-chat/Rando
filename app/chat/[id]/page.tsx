@@ -2,31 +2,51 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { useChat } from '@/hooks/useChat'
+import toast from 'react-hot-toast'
 
 export default function ChatPage({ params }: { params: { id: string } }) {
   const sessionId = params.id
   const router = useRouter()
-  const { session, guestSession, messages, isLoading, sendMessage, endChat } = useChat(sessionId)
+  
+  const {
+    session,
+    guestSession,
+    messages,
+    messageReactions,
+    isLoading,
+    isSending,
+    sendMessage,
+    sendTyping,
+    addReaction,
+    removeReaction,
+    endChat,
+    addFriend,
+    reportUser,
+    blockUser,
+    notifications,
+    unreadCount,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    isTyping,
+    isOnline,
+    partnerId,
+    partnerName,
+    messagesEndRef,
+  } = useChat(sessionId)
   
   const [messageInput, setMessageInput] = useState('')
   const [uploading, setUploading] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
-  const [isOnline, setIsOnline] = useState(true)
-  const [isTyping, setIsTyping] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [editImage, setEditImage] = useState<string | null>(null)
-  const [reactions, setReactions] = useState<Record<string, string[]>>({})
-  const [friends, setFriends] = useState<any[]>([])
-  const [showFriends, setShowFriends] = useState(false)
-  const [reportReason, setReportReason] = useState('')
   const [showReport, setShowReport] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [reactionPicker, setReactionPicker] = useState<string | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0)
 
   // Handle resize for responsiveness
@@ -41,31 +61,25 @@ export default function ChatPage({ params }: { params: { id: string } }) {
   const emojis = ['😊', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💯', '😢', '😡', '🥰', '🤔']
   const reactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡']
 
-  // Simulate online status changes
-  useEffect(() => {
-    const onlineInterval = setInterval(() => {
-      setIsOnline(Math.random() > 0.3)
-    }, 30000)
-    return () => clearInterval(onlineInterval)
-  }, [])
-
-  // Simulate typing indicator
-  useEffect(() => {
-    const typingInterval = setInterval(() => {
-      if (Math.random() > 0.7) {
-        setIsTyping(true)
-        setTimeout(() => setIsTyping(false), 3000)
-      }
-    }, 10000)
-    return () => clearInterval(typingInterval)
-  }, [])
-
+  // ============================================
+  // SEND MESSAGE HANDLER
+  // ============================================
   const handleSendMessage = async () => {
     if (!messageInput.trim()) return
     await sendMessage(messageInput)
     setMessageInput('')
   }
 
+  // ============================================
+  // TYPING HANDLER
+  // ============================================
+  const handleTyping = () => {
+    sendTyping()
+  }
+
+  // ============================================
+  // IMAGE UPLOAD
+  // ============================================
   const uploadImage = async (file: File) => {
     if (!session || !guestSession) return
 
@@ -81,7 +95,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath)
 
       await sendMessage(`📷 Image: ${publicUrl}`)
+      toast.success('Image uploaded!')
     } catch (err) {
+      toast.error('Upload failed')
       console.error('Upload error:', err)
     } finally {
       setUploading(false)
@@ -90,7 +106,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return
+    if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
+      toast.error('File must be an image under 5MB')
+      return
+    }
     setEditImage(URL.createObjectURL(file))
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -102,56 +121,83 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     setEditImage(null)
   }
 
+  // ============================================
+  // REACTION HANDLERS
+  // ============================================
   const handleReaction = (messageId: string, emoji: string) => {
-    setReactions(prev => {
-      const messageReactions = prev[messageId] || []
-      if (messageReactions.includes(emoji)) {
-        return {
-          ...prev,
-          [messageId]: messageReactions.filter(e => e !== emoji)
-        }
-      }
-      return {
-        ...prev,
-        [messageId]: [...messageReactions, emoji]
-      }
-    })
+    const userReactions = messageReactions[messageId] || {}
+    const hasReacted = Object.keys(userReactions).includes(emoji)
+    
+    if (hasReacted) {
+      removeReaction(messageId, emoji)
+    } else {
+      addReaction(messageId, emoji)
+    }
+    setReactionPicker(null)
   }
 
+  // ============================================
+  // SOCIAL FEATURES
+  // ============================================
   const handleAddFriend = async () => {
-    const partnerName = isUser1 ? session.user2_display_name : session.user1_display_name
-    setFriends(prev => [...prev, { name: partnerName, id: Date.now() }])
+    const result = await addFriend()
+    if (result.success) {
+      toast.success('Friend request sent!')
+    } else {
+      toast.error('Failed to send friend request')
+    }
     setShowMenu(false)
-    alert(`${partnerName} added to friends!`)
   }
 
   const handleReport = async () => {
-    if (!reportReason.trim()) return
-    alert(`Report sent: ${reportReason}`)
-    setShowReport(false)
-    setReportReason('')
+    if (!reportReason.trim()) {
+      toast.error('Please provide a reason')
+      return
+    }
+    
+    const result = await reportUser(reportReason)
+    if (result.success) {
+      toast.success('Report submitted to moderators')
+      setShowReport(false)
+      setReportReason('')
+    } else {
+      toast.error('Failed to submit report')
+    }
     setShowMenu(false)
   }
 
   const handleBlock = async () => {
     if (confirm('Block this user? They will not be able to match with you again.')) {
-      alert('User blocked')
-      await endChat()
-      router.push('/matchmaking')
+      const result = await blockUser()
+      if (result.success) {
+        toast.success('User blocked')
+        await endChat()
+        router.push('/matchmaking')
+      } else {
+        toast.error('Failed to block user')
+      }
     }
+    setShowMenu(false)
   }
 
-  // 🔥 FIX: Add handleEndChat function
+  // ============================================
+  // NOTIFICATION HANDLERS
+  // ============================================
+  const handleNotificationClick = async (notificationId: string) => {
+    await markNotificationAsRead(notificationId)
+  }
+
+  // ============================================
+  // END CHAT HANDLER
+  // ============================================
   const handleEndChat = async () => {
     await endChat()
     router.push('/matchmaking')
   }
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
+  // ============================================
+  // LOADING STATE
+  // ============================================
   if (isLoading) {
     return (
       <div style={{ 
@@ -210,10 +256,9 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     )
   }
 
-  const isUser1 = guestSession.guest_id === session.user1_id
-  const partnerName = isUser1 ? (session.user2_display_name || 'Anonymous') : (session.user1_display_name || 'Anonymous')
-  const partnerId = isUser1 ? session.user2_id : session.user1_id
-
+  // ============================================
+  // MAIN RENDER
+  // ============================================
   return (
     <div style={{ 
       display: 'flex', 
@@ -281,45 +326,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      {/* Friends List Modal */}
-      {showFriends && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }} onClick={() => setShowFriends(false)}>
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '20px',
-            maxWidth: '400px',
-            width: '100%',
-            maxHeight: '80%',
-            overflow: 'auto'
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginBottom: '16px' }}>Friends ({friends.length})</h3>
-            {friends.length === 0 ? (
-              <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No friends yet</p>
-            ) : (
-              friends.map(friend => (
-                <div key={friend.id} style={{ padding: '12px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{friend.name}</span>
-                  <button style={{ color: '#667eea', background: 'none', border: 'none', cursor: 'pointer' }}>Message</button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Report Modal */}
       {showReport && (
         <div style={{
@@ -353,7 +359,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 border: '1px solid #e5e7eb',
                 borderRadius: '8px',
                 marginBottom: '16px',
-                minHeight: '100px'
+                minHeight: '100px',
+                fontSize: isMobile ? '14px' : '16px'
               }}
             />
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -368,7 +375,61 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         </div>
       )}
 
-      {/* Header - Responsive with menu */}
+      {/* Notifications Panel */}
+      {showNotifications && (
+        <div style={{
+          position: 'absolute',
+          top: '70px',
+          right: isMobile ? '10px' : '20px',
+          width: isMobile ? 'calc(100% - 20px)' : '350px',
+          maxHeight: '400px',
+          overflowY: 'auto',
+          background: 'white',
+          borderRadius: '12px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+          border: '1px solid #e5e7eb',
+          zIndex: 100,
+          padding: '16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600 }}>Notifications</h3>
+            {unreadCount > 0 && (
+              <button 
+                onClick={markAllNotificationsAsRead}
+                style={{ fontSize: '12px', color: '#667eea', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                Mark all read
+              </button>
+            )}
+          </div>
+          {notifications.length === 0 ? (
+            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No notifications</p>
+          ) : (
+            notifications.map(notif => (
+              <div
+                key={notif.id}
+                onClick={() => handleNotificationClick(notif.id)}
+                style={{
+                  padding: '12px',
+                  borderBottom: '1px solid #e5e7eb',
+                  cursor: 'pointer',
+                  background: notif.is_read ? 'white' : '#f3f4f6',
+                  borderRadius: '8px',
+                  marginBottom: '4px'
+                }}
+              >
+                <div style={{ fontWeight: notif.is_read ? 'normal' : 600 }}>{notif.title}</div>
+                {notif.content && <div style={{ fontSize: '12px', color: '#6b7280' }}>{notif.content}</div>}
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>
+                  {new Date(notif.created_at).toLocaleTimeString()}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Header */}
       <div style={{ 
         padding: isMobile ? '12px 16px' : '16px 20px', 
         background: 'white', 
@@ -430,20 +491,43 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           </div>
           
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button 
-              onClick={() => setShowFriends(true)}
-              style={{ 
-                padding: isMobile ? '6px' : '8px', 
-                background: '#f3f4f6', 
-                border: 'none', 
-                borderRadius: '6px', 
-                cursor: 'pointer',
-                fontSize: isMobile ? '16px' : '18px'
-              }}
-              title="Friends"
-            >
-              👥
-            </button>
+            {/* Notifications Bell */}
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                style={{ 
+                  padding: isMobile ? '6px' : '8px', 
+                  background: '#f3f4f6', 
+                  border: 'none', 
+                  borderRadius: '6px', 
+                  cursor: 'pointer',
+                  fontSize: isMobile ? '16px' : '18px',
+                  position: 'relative'
+                }}
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-5px',
+                    right: '-5px',
+                    background: '#ef4444',
+                    color: 'white',
+                    fontSize: '10px',
+                    minWidth: '16px',
+                    height: '16px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Menu */}
             <div style={{ position: 'relative' }}>
               <button 
                 onClick={() => setShowMenu(!showMenu)}
@@ -459,7 +543,6 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 ⋮
               </button>
               
-              {/* Dropdown Menu */}
               {showMenu && (
                 <div style={{
                   position: 'absolute',
@@ -546,7 +629,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      {/* Messages - Responsive with reactions */}
+      {/* Messages */}
       <div style={{ 
         flex: 1, 
         overflowY: 'auto', 
@@ -569,7 +652,8 @@ export default function ChatPage({ params }: { params: { id: string } }) {
             const isMe = msg.sender_id === guestSession.guest_id
             const isImage = msg.content.startsWith('📷 Image:')
             const imageUrl = isImage ? msg.content.replace('📷 Image: ', '') : null
-            const messageReactions = reactions[msg.id] || []
+            const reactions = messageReactions[msg.id] || {}
+            const hasReactions = Object.keys(reactions).length > 0
 
             return (
               <div key={msg.id || i} style={{ 
@@ -578,7 +662,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                 alignItems: isMe ? 'flex-end' : 'flex-start',
                 width: '100%',
                 position: 'relative'
-              }}>
+              }}
+              onMouseEnter={() => !isMe && setReactionPicker(msg.id)}
+              onMouseLeave={() => setReactionPicker(null)}
+              >
                 <div style={{ 
                   maxWidth: isMobile ? '85%' : '70%',
                   minWidth: isMobile ? '60%' : 'auto'
@@ -628,59 +715,73 @@ export default function ChatPage({ params }: { params: { id: string } }) {
                         {msg.content}
                       </div>
                     )}
-                    
-                    {/* Reactions bar */}
-                    {!isImage && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '-20px',
-                        right: isMe ? '0' : 'auto',
-                        left: isMe ? 'auto' : '0',
-                        display: 'flex',
-                        gap: '4px',
-                        background: 'white',
-                        borderRadius: '20px',
-                        padding: '2px 4px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        zIndex: 5
-                      }}>
-                        {reactionEmojis.map(emoji => (
-                          <button
-                            key={emoji}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleReaction(msg.id, emoji)
-                            }}
-                            style={{
-                              border: 'none',
-                              background: messageReactions.includes(emoji) ? '#e5e7eb' : 'transparent',
-                              borderRadius: '50%',
-                              width: '24px',
-                              height: '24px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                   
-                  {/* Show reactions */}
-                  {messageReactions.length > 0 && (
+                  {/* Reactions display */}
+                  {hasReactions && (
                     <div style={{
                       display: 'flex',
-                      gap: '2px',
+                      gap: '4px',
                       marginTop: '4px',
                       justifyContent: isMe ? 'flex-end' : 'flex-start'
                     }}>
-                      {messageReactions.map(emoji => (
-                        <span key={emoji} style={{ fontSize: '12px' }}>{emoji}</span>
+                      {Object.entries(reactions).map(([emoji, count]) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReaction(msg.id, emoji)}
+                          style={{
+                            border: '1px solid #e5e7eb',
+                            background: 'white',
+                            borderRadius: '12px',
+                            padding: '2px 6px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '2px'
+                          }}
+                        >
+                          {emoji} {count as number > 1 && <span style={{ fontSize: '10px', color: '#6b7280' }}>{count as number}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Reaction picker */}
+                  {reactionPicker === msg.id && !isMe && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '0',
+                      left: isMe ? 'auto' : '100%',
+                      right: isMe ? '100%' : 'auto',
+                      background: 'white',
+                      borderRadius: '20px',
+                      padding: '4px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                      border: '1px solid #e5e7eb',
+                      display: 'flex',
+                      gap: '2px',
+                      zIndex: 10
+                    }}>
+                      {reactionEmojis.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReaction(msg.id, emoji)}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            borderRadius: '50%',
+                            width: '32px',
+                            height: '32px',
+                            cursor: 'pointer',
+                            fontSize: '18px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {emoji}
+                        </button>
                       ))}
                     </div>
                   )}
@@ -692,14 +793,14 @@ export default function ChatPage({ params }: { params: { id: string } }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input - Responsive with edit option */}
+      {/* Input */}
       <div style={{ 
         padding: isMobile ? '12px' : '16px', 
         background: 'white', 
         borderTop: '1px solid #e5e7eb', 
         position: 'relative'
       }}>
-        {/* Emoji picker - Responsive */}
+        {/* Emoji picker */}
         {showEmojiPicker && (
           <div style={{ 
             position: 'absolute', 
@@ -771,7 +872,10 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           
           <input
             value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
+            onChange={(e) => {
+              setMessageInput(e.target.value)
+              handleTyping()
+            }}
             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
             placeholder="Type a message..."
             style={{ 
@@ -816,22 +920,22 @@ export default function ChatPage({ params }: { params: { id: string } }) {
           
           <button 
             onClick={handleSendMessage} 
-            disabled={!messageInput.trim()} 
+            disabled={!messageInput.trim() || isSending} 
             style={{ 
               padding: isMobile ? '10px 16px' : '12px 24px', 
-              background: messageInput.trim() ? '#667eea' : '#e5e7eb', 
-              color: messageInput.trim() ? 'white' : '#9ca3af', 
+              background: messageInput.trim() && !isSending ? '#667eea' : '#e5e7eb', 
+              color: messageInput.trim() && !isSending ? 'white' : '#9ca3af', 
               border: 'none', 
               borderRadius: '24px', 
-              cursor: messageInput.trim() ? 'pointer' : 'not-allowed', 
+              cursor: messageInput.trim() && !isSending ? 'pointer' : 'not-allowed', 
               fontWeight: 600, 
               fontSize: isMobile ? '14px' : '15px',
               whiteSpace: 'nowrap',
-              boxShadow: messageInput.trim() ? '0 4px 12px rgba(102,126,234,0.4)' : 'none',
+              boxShadow: messageInput.trim() && !isSending ? '0 4px 12px rgba(102,126,234,0.4)' : 'none',
               minWidth: isMobile ? '60px' : '70px'
             }}
           >
-            Send
+            {isSending ? '...' : 'Send'}
           </button>
         </div>
         
