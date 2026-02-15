@@ -143,8 +143,14 @@ export function ChatModals({
             </button>
             <button
               onClick={() => {
-                const file = new File([], 'image.jpg') // You'd need actual file here
-                onSendEdit(file)
+                // Convert the preview URL back to a file
+                fetch(editImage)
+                  .then(res => res.blob())
+                  .then(blob => {
+                    const file = new File([blob], 'image.jpg', { type: 'image/jpeg' })
+                    console.log('📷 Sending image file:', file)
+                    onSendEdit(file)
+                  })
               }}
               style={modalSubmitButtonStyle}
             >
