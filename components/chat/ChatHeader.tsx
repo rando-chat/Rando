@@ -1,7 +1,5 @@
 'use client'
 
-import { ChatActions } from './ChatActions'
-
 interface ChatHeaderProps {
   partnerName: string
   isOnline: boolean
@@ -10,9 +8,6 @@ interface ChatHeaderProps {
   onOpenSidebar: () => void
   onReport: () => void
   onEndChat: () => void
-  onAddFriend?: () => Promise<void>
-  onBlock?: () => Promise<void>
-  onMute?: () => void
 }
 
 export function ChatHeader({
@@ -22,119 +17,117 @@ export function ChatHeader({
   partnerLeft,
   onOpenSidebar,
   onReport,
-  onEndChat,
-  onAddFriend,
-  onBlock,
-  onMute
+  onEndChat
 }: ChatHeaderProps) {
   return (
-    <div style={{ 
-      padding: '16px 20px', 
-      background: 'white', 
-      borderBottom: '1px solid #e5e7eb',
+    <div style={{
+      background: 'rgba(10,10,15,0.95)',
+      backdropFilter: 'blur(10px)',
+      borderBottom: '1px solid rgba(124,58,237,0.2)',
+      padding: 'clamp(12px, 3vw, 16px) clamp(16px, 4vw, 24px)',
       display: 'flex',
+      alignItems: 'center',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      zIndex: 20,
+      position: 'relative',
     }}>
-      {/* Left side - Partner info */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <h1 style={{ 
-            fontSize: '20px', 
-            fontWeight: 600, 
-            color: '#1f2937', 
-            margin: 0 
+      {/* Left section - Partner info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ position: 'relative' }}>
+          <div style={{
+            width: 'clamp(36px, 8vw, 44px)',
+            height: 'clamp(36px, 8vw, 44px)',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: 'clamp(16px, 4vw, 20px)',
           }}>
-            💬 {partnerName}
-          </h1>
-          {!partnerLeft && (
-            <span style={{
-              width: '10px',
-              height: '10px',
+            {partnerName?.[0]?.toUpperCase() || '?'}
+          </div>
+          {isOnline && !partnerLeft && (
+            <div style={{
+              position: 'absolute',
+              bottom: 2,
+              right: 2,
+              width: 'clamp(8px, 2vw, 10px)',
+              height: 'clamp(8px, 2vw, 10px)',
+              background: '#22c55e',
               borderRadius: '50%',
-              background: isOnline ? '#10b981' : '#9ca3af',
-              animation: isOnline ? 'pulse 2s infinite' : 'none'
+              border: '2px solid #0a0a0f',
+              animation: 'pulse 2s infinite',
             }} />
           )}
         </div>
-        
-        {/* Typing indicator */}
-        {isTyping && !partnerLeft && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginTop: '2px' }}>
-            <span style={{ fontSize: '12px', color: '#667eea' }}>typing</span>
-            <div style={{ display: 'flex', gap: '2px' }}>
-              <span style={{ animation: 'typing 1s infinite' }}>.</span>
-              <span style={{ animation: 'typing 1s infinite 0.2s' }}>.</span>
-              <span style={{ animation: 'typing 1s infinite 0.4s' }}>.</span>
-            </div>
-          </div>
-        )}
-        {partnerLeft && (
-          <span style={{ fontSize: '12px', color: '#ef4444', marginTop: '2px', display: 'block' }}>
-            • Left the chat
-          </span>
-        )}
+
+        <div>
+          <h2 style={{
+            fontSize: 'clamp(16px, 4vw, 18px)',
+            fontWeight: 600,
+            color: '#f0f0f0',
+            marginBottom: 2,
+            fontFamily: "'Georgia', serif",
+          }}>
+            {partnerLeft ? `${partnerName} left` : partnerName}
+          </h2>
+          <p style={{
+            fontSize: 'clamp(11px, 2.8vw, 12px)',
+            color: isTyping ? '#7c3aed' : '#60607a',
+            fontStyle: isTyping ? 'normal' : 'italic',
+          }}>
+            {partnerLeft ? 'Chat ended' : isTyping ? 'typing...' : 'Online'}
+          </p>
+        </div>
       </div>
 
-      {/* Right side - Actions */}
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-        {/* Info button */}
+      {/* Right section - Actions */}
+      <div style={{ display: 'flex', gap: 'clamp(4px, 2vw, 8px)' }}>
         <button
           onClick={onOpenSidebar}
-          style={{
-            padding: '8px 12px',
-            background: '#f3f4f6',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
+          style={iconButtonStyle}
+          title="Chat info"
         >
-          <span>ℹ️</span> Info
+          ℹ️
         </button>
-
-        {/* Chat Actions Menu */}
-        <ChatActions
-          onAddFriend={onAddFriend}
-          onReport={onReport}
-          onBlock={onBlock}
-          onMute={onMute}
-          isPartnerOnline={isOnline}
-          isPartnerLeft={partnerLeft}
-        />
-
-        {/* End Chat button */}
+        <button
+          onClick={onReport}
+          style={iconButtonStyle}
+          title="Report user"
+        >
+          ⚠️
+        </button>
         <button
           onClick={onEndChat}
-          style={{
-            padding: '8px 16px',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 500
-          }}
+          style={{...iconButtonStyle, color: '#ef4444'}}
+          title="End chat"
         >
-          End Chat
+          ✕
         </button>
       </div>
 
       <style>{`
         @keyframes pulse {
-          0% { opacity: 1; }
+          0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-        @keyframes typing {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 1; }
         }
       `}</style>
     </div>
   )
+}
+
+const iconButtonStyle = {
+  background: 'transparent',
+  border: '1px solid rgba(124,58,237,0.2)',
+  borderRadius: '8px',
+  width: 'clamp(36px, 8vw, 40px)',
+  height: 'clamp(36px, 8vw, 40px)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  fontSize: 'clamp(16px, 4vw, 18px)',
+  color: '#a0a0b0',
+  transition: 'all 0.2s ease',
 }
