@@ -17,30 +17,37 @@ export function QueueStatus({
 }: QueueStatusProps) {
   return (
     <div style={{
-      background: 'white',
-      borderRadius: '16px',
-      padding: '24px',
-      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-      textAlign: 'center'
+      background: 'rgba(255,255,255,0.03)',
+      backdropFilter: 'blur(10px)',
+      borderRadius: 'clamp(12px, 3vw, 16px)',
+      padding: 'clamp(20px, 4vw, 24px)',
+      border: '1px solid rgba(255,255,255,0.07)',
+      textAlign: 'center',
+      width: '100%',
+      transition: 'all 0.3s ease',
     }}>
-      {/* User display (like debug) */}
+      {/* User display */}
       <div style={{
-        background: '#f3f4f6',
-        borderRadius: '12px',
-        padding: '12px',
-        marginBottom: '20px'
+        background: 'rgba(124,58,237,0.1)',
+        borderRadius: 'clamp(8px, 2vw, 12px)',
+        padding: 'clamp(10px, 2.5vw, 12px)',
+        marginBottom: 'clamp(16px, 4vw, 20px)',
+        border: '1px solid rgba(124,58,237,0.2)',
       }}>
         <p style={{
-          fontSize: '14px',
-          color: '#6b7280',
-          marginBottom: '4px'
+          fontSize: 'clamp(12px, 3vw, 14px)',
+          color: '#a0a0b0',
+          marginBottom: '4px',
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
         }}>
           You are:
         </p>
         <p style={{
-          fontSize: '18px',
+          fontSize: 'clamp(16px, 4vw, 18px)',
           fontWeight: 'bold',
-          color: '#667eea'
+          color: '#7c3aed',
+          fontFamily: "'Georgia', serif",
         }}>
           {displayName}
         </p>
@@ -49,20 +56,22 @@ export function QueueStatus({
       {!isInQueue ? (
         <>
           <h3 style={{
-            fontSize: '20px',
+            fontSize: 'clamp(18px, 4.5vw, 20px)',
             fontWeight: 600,
-            color: '#1f2937',
-            marginBottom: '12px'
+            color: '#f0f0f0',
+            marginBottom: 'clamp(8px, 2vw, 12px)',
+            fontFamily: "'Georgia', serif",
           }}>
             Ready to Chat?
           </h3>
           
           <p style={{
-            fontSize: '14px',
-            color: '#6b7280',
-            marginBottom: '24px'
+            fontSize: 'clamp(13px, 3.2vw, 14px)',
+            color: '#a0a0b0',
+            marginBottom: 'clamp(20px, 5vw, 24px)',
+            fontStyle: 'italic',
           }}>
-            Click below to find a random stranger
+            Meet someone new in seconds
           </p>
 
           <button
@@ -70,19 +79,23 @@ export function QueueStatus({
             disabled={isLoading}
             style={{
               width: '100%',
-              padding: '16px 24px',
-              background: isLoading ? '#9ca3af' : '#667eea',
+              padding: 'clamp(14px, 3.5vw, 16px)',
+              background: isLoading ? '#4a4a6a' : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
               color: 'white',
               border: 'none',
-              borderRadius: '12px',
+              borderRadius: 'clamp(8px, 2vw, 12px)',
               cursor: isLoading ? 'not-allowed' : 'pointer',
-              fontSize: '18px',
+              fontSize: 'clamp(16px, 4vw, 18px)',
               fontWeight: 600,
-              boxShadow: isLoading ? 'none' : '0 4px 12px rgba(102,126,234,0.4)',
-              transition: 'all 0.2s'
+              fontFamily: "'Georgia', serif",
+              boxShadow: isLoading ? 'none' : '0 4px 20px rgba(124,58,237,0.4)',
+              transition: 'all 0.3s ease',
+              opacity: isLoading ? 0.7 : 1,
             }}
+            onMouseEnter={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(-2px)')}
+            onMouseLeave={(e) => !isLoading && (e.currentTarget.style.transform = 'translateY(0)')}
           >
-            {isLoading ? 'Joining...' : 'Find a Stranger'}
+            {isLoading ? 'Joining...' : 'Find a Stranger →'}
           </button>
         </>
       ) : (
@@ -92,19 +105,19 @@ export function QueueStatus({
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            marginBottom: '16px'
+            marginBottom: 'clamp(16px, 4vw, 20px)',
           }}>
             <div style={{
-              width: '12px',
-              height: '12px',
-              background: '#10b981',
+              width: 'clamp(8px, 2vw, 10px)',
+              height: 'clamp(8px, 2vw, 10px)',
+              background: '#22c55e',
               borderRadius: '50%',
-              animation: 'pulse 2s infinite'
+              animation: 'pulse 2s infinite',
             }} />
             <span style={{
-              fontSize: '16px',
-              color: '#1f2937',
-              fontWeight: 500
+              fontSize: 'clamp(14px, 3.5vw, 16px)',
+              color: '#f0f0f0',
+              fontWeight: 500,
             }}>
               In Queue
             </span>
@@ -113,18 +126,25 @@ export function QueueStatus({
           <button
             onClick={onLeave}
             style={{
-              padding: '12px 24px',
-              background: '#ef4444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
+              padding: 'clamp(10px, 2.5vw, 12px) clamp(20px, 5vw, 24px)',
+              background: 'transparent',
+              color: '#ef4444',
+              border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: 'clamp(6px, 1.5vw, 8px)',
               cursor: 'pointer',
-              fontSize: '16px',
+              fontSize: 'clamp(14px, 3.5vw, 16px)',
               fontWeight: 500,
-              transition: 'background 0.2s'
+              transition: 'all 0.2s ease',
+              width: '100%',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#dc2626'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#ef4444'}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+              e.currentTarget.style.borderColor = '#ef4444';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)';
+            }}
           >
             Leave Queue
           </button>
@@ -133,8 +153,14 @@ export function QueueStatus({
 
       <style>{`
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        @media (max-width: 480px) {
+          button { 
+            padding: 16px !important;
+            font-size: 16px !important;
+          }
         }
       `}</style>
     </div>
