@@ -38,30 +38,21 @@ export function ChatInput({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    console.log('📷 File selected:', file?.name, file?.type, file?.size)
-    
     if (!file) return
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file')
       return
     }
 
-    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image must be less than 5MB')
       return
     }
 
-    // Create preview URL
     const url = URL.createObjectURL(file)
-    console.log('📷 Preview URL created:', url)
-    
-    // Pass to parent for editing/upload
     onEditImage(url)
     
-    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -91,10 +82,7 @@ export function ChatInput({
       
       <button
         type="button"
-        onClick={() => {
-          console.log('📷 Image button clicked')
-          fileInputRef.current?.click()
-        }}
+        onClick={() => fileInputRef.current?.click()}
         disabled={isSending}
         style={{
           padding: 'clamp(10px, 2.5vw, 12px)',
