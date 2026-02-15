@@ -1,7 +1,7 @@
 'use client'
 
-import { ChatContainer } from '@/components/chat/ChatContainer'
+import { ChatInterface } from '@/components/chat/ChatInterface'
 
 export default function ChatPage({ params }: { params: { id: string } }) {
-  return <ChatContainer sessionId={params.id} />
+  return <ChatInterface sessionId={params.id} />
 }
