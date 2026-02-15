@@ -25,14 +25,22 @@ export function ChatHeader({
   onEndChat
 }: ChatHeaderProps) {
   const [partnerName, setPartnerName] = useState('')
+  const [loading, setLoading] = useState(true)
 
   // Load partner name directly from database
   useEffect(() => {
-    if (!sessionId || !guestId) return
+    console.log('🔥 ChatHeader useEffect triggered')
+    console.log('📌 sessionId:', sessionId)
+    console.log('📌 guestId:', guestId)
+
+    if (!sessionId || !guestId) {
+      console.log('⏳ Waiting for sessionId and guestId...')
+      return
+    }
 
     const loadPartnerName = async () => {
-      console.log('🔍 Header loading - Session:', sessionId)
-      console.log('🔍 Header loading - Guest ID:', guestId)
+      console.log('🔍 Loading partner name from database...')
+      setLoading(true)
 
       const { data: session, error } = await supabase
         .from('chat_sessions')
@@ -41,28 +49,47 @@ export function ChatHeader({
         .single()
 
       if (error) {
-        console.error('Header error:', error)
+        console.error('❌ Database error:', error)
+        setLoading(false)
         return
       }
 
-      console.log('📊 Header session data:', session)
+      console.log('📊 Session data received:', session)
 
-      // Determine partner name
       if (session.user1_id === guestId) {
-        // Current user is user1, partner is user2
         setPartnerName(session.user2_display_name)
         console.log('✅ I am user1, partner is:', session.user2_display_name)
       } else if (session.user2_id === guestId) {
-        // Current user is user2, partner is user1
         setPartnerName(session.user1_display_name)
         console.log('✅ I am user2, partner is:', session.user1_display_name)
       } else {
-        console.error('❌ User not found in session!')
+        console.error('❌ User ID mismatch!')
+        console.log('Session user1:', session.user1_id)
+        console.log('Session user2:', session.user2_id)
+        console.log('Current guest:', guestId)
       }
+
+      setLoading(false)
     }
 
     loadPartnerName()
   }, [sessionId, guestId])
+
+  if (loading) {
+    return (
+      <div style={{
+        background: 'rgba(10,10,15,0.95)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid rgba(124,58,237,0.2)',
+        padding: 'clamp(12px, 3vw, 16px) clamp(16px, 4vw, 24px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div style={{ color: '#60607a' }}>Connecting...</div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -115,7 +142,7 @@ export function ChatHeader({
             marginBottom: 2,
             fontFamily: "'Georgia', serif",
           }}>
-            {partnerLeft ? `${partnerName} left` : (partnerName || 'Connecting...')}
+            {partnerLeft ? `${partnerName} left` : partnerName}
           </h2>
           <p style={{
             fontSize: 'clamp(11px, 2.8vw, 12px)',
