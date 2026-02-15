@@ -326,5 +326,67 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         myName={chat.myName || ''}
       />
     </div>
+    {/* TEMPORARY TEST BUTTONS */}
+<div style={{
+  position: 'fixed',
+  bottom: '100px',
+  right: '20px',
+  zIndex: 100000,
+  display: 'flex',
+  gap: '10px',
+  flexDirection: 'column'
+}}>
+  <button
+    onClick={async () => {
+      console.log('🧪 TEST: Manual image upload test')
+      // Create a test image (a small red dot)
+      const canvas = document.createElement('canvas')
+      canvas.width = 100
+      canvas.height = 100
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = 'red'
+      ctx.fillRect(0, 0, 100, 100)
+      
+      canvas.toBlob(async (blob) => {
+        const testFile = new File([blob!], 'test.jpg', { type: 'image/jpeg' })
+        console.log('🧪 Test file created:', testFile)
+        await chat.uploadImage(testFile)
+      }, 'image/jpeg')
+    }}
+    style={{
+      background: '#ef4444',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      padding: '10px 20px',
+      cursor: 'pointer',
+      fontWeight: 'bold'
+    }}
+  >
+    🧪 TEST IMAGE UPLOAD
+  </button>
+  
+  <button
+    onClick={() => {
+      console.log('🧪 TEST: Check session data')
+      console.log('Session ID:', sessionId)
+      console.log('Guest session:', chat.guestSession)
+      console.log('Partner name:', chat.partnerName)
+      console.log('My name:', chat.myName)
+      alert(`Session: ${sessionId}\nMy name: ${chat.myName}\nPartner: ${chat.partnerName}`)
+    }}
+    style={{
+      background: '#3b82f6',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      padding: '10px 20px',
+      cursor: 'pointer',
+      fontWeight: 'bold'
+    }}
+  >
+    🧪 CHECK SESSION
+  </button>
+</div>
   )
 }
