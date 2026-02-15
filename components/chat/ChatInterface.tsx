@@ -68,54 +68,73 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
     router.push('/matchmaking')
   }
 
-  const handleReport = async (reason: string) => {
-    // Implement report logic here
-    console.log('Report submitted:', reason)
-    setShowReport(false)
-    // Show success message
-    setShowSafetyWarning(true)
-    setTimeout(() => setShowSafetyWarning(false), 3000)
+  const handleReport = async (reason: string, category: string = 'other') => {
+    if (!chat.guestSession || !sessionId) return
+    
+    try {
+      await chat.reportUser(reason, category)
+      setShowReport(false)
+      setShowSafetyWarning(true)
+      setTimeout(() => setShowSafetyWarning(false), 3000)
+    } catch (err) {
+      console.error('Report error:', err)
+    }
   }
 
   const handleBlock = async () => {
     if (confirm('Block this user? They will not be able to match with you again.')) {
-      // Implement block logic here
-      console.log('User blocked')
+      await chat.blockUser()
       await handleEndChat()
     }
   }
 
   const handleAddFriend = async () => {
-    // Implement add friend logic here
-    console.log('Friend request sent')
+    await chat.addFriend()
   }
 
   const handleImageUpload = async (file: File) => {
-    // Implement image upload logic here
-    // This should upload to Supabase Storage and send message with URL
-    console.log('Uploading image:', file.name)
-
-    // Simulate upload
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Send message with image URL (you'd get the actual URL from storage)
-    await chat.sendMessage(`📷 Image: [Uploaded: ${file.name}]`)
+    if (!chat.guestSession || !sessionId) return
+    await chat.uploadImage(file, sessionId)
   }
 
   return (
     <div 
       ref={containerRef}
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        height: '100vh', 
-        background: '#f9fafb',
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        background: '#0a0a0f',
+        position: 'relative',
+        overflow: 'hidden',
         maxWidth: '1200px',
         margin: '0 auto',
         width: '100%',
-        position: 'relative'
       }}
     >
+      {/* Background orbs - same as landing */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+        <div style={{
+          position: 'absolute', top: '10%', left: '15%',
+          width: 'min(600px, 80vw)', height: 'min(600px, 80vw)',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)',
+          animation: 'float1 8s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '15%', right: '10%',
+          width: 'min(500px, 70vw)', height: 'min(500px, 70vw)',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(79,70,229,0.12) 0%, transparent 70%)',
+          animation: 'float2 10s ease-in-out infinite',
+        }} />
+      </div>
+
+      <style>{`
+        @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,-40px)} }
+        @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
+      `}</style>
+
       {/* Header */}
       <ChatHeader
         partnerName={chat.partnerName}
@@ -128,14 +147,14 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       />
 
       {/* Main Chat Area */}
-      <div style={{ 
-        position: 'relative', 
-        flex: 1, 
+      <div style={{
+        position: 'relative',
+        flex: 1,
         overflow: 'hidden',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        zIndex: 10,
       }}>
-        {/* Messages */}
         <ChatMessages
           messages={chat.messages}
           currentUserId={chat.guestSession?.guest_id}
@@ -147,16 +166,15 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           leftAt={leftAt}
         />
 
-        {/* Typing Indicator */}
         {chat.isTyping && !chat.partnerLeft && (
-          <TypingIndicator 
-            names={[chat.partnerName]} 
-            isVisible={true} 
+          <TypingIndicator
+            names={[chat.partnerName]}
+            isVisible={true}
           />
         )}
       </div>
 
-      {/* Input Area - ADDED missing required props */}
+      {/* Input Area */}
       {!chat.partnerLeft && (
         <ChatInput
           sessionId={sessionId}
@@ -167,7 +185,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         />
       )}
 
-      {/* Safety Warning Toast */}
+      {/* Safety Warning */}
       {showSafetyWarning && (
         <SafetyWarning
           message="Report submitted to moderators"
@@ -191,7 +209,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         onAddFriend={handleAddFriend}
       />
 
-      {/* Modals - Image upload happens here */}
+      {/* Modals */}
       <ChatModals
         showReport={showReport}
         onCloseReport={() => setShowReport(false)}
