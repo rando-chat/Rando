@@ -163,7 +163,6 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
           currentUserId={chat.guestSession?.guest_id}
           currentUserName={chat.guestSession?.display_name}
           partnerLeft={chat.partnerLeft}
-          partnerName={chat.partnerName}
           onImageClick={(url) => setSelectedImage(url)}
           messagesEndRef={chat.messagesEndRef}
           leftAt={leftAt}
@@ -171,7 +170,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
 
         {chat.isTyping && !chat.partnerLeft && (
           <TypingIndicator
-            names={[chat.partnerName]}
+            names={[chat.partnerName || '']}
             isVisible={true}
           />
         )}
@@ -203,7 +202,7 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
       <ChatSidebar
         isOpen={showSidebar}
         onClose={() => setShowSidebar(false)}
-        partnerName={chat.partnerName}
+        partnerName={chat.partnerName || ''}
         chatDuration={chatDuration}
         messageCount={messageCount}
         onReport={() => {
