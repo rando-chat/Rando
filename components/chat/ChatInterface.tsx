@@ -137,10 +137,9 @@ export default function ChatInterface({ sessionId }: ChatInterfaceProps) {
         @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
       `}</style>
 
-      {/* Header - Fixed version with sessionId and guestId */}
+      {/* Header - Now just receives partnerName from useChat */}
       <ChatHeader
-        sessionId={sessionId}
-        guestId={chat.guestSession?.guest_id}
+        partnerName={chat.partnerName}
         isOnline={true}
         isTyping={chat.isTyping}
         partnerLeft={chat.partnerLeft}
