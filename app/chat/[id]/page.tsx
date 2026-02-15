@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase/client'
 import { useChat } from '@/hooks/useChat'
 import toast from 'react-hot-toast'
+import { formatDistanceToNow, format } from 'date-fns'
+
 
 export default function ChatPage({ params }: { params: { id: string } }) {
   const sessionId = params.id
