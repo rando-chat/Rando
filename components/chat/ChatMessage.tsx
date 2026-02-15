@@ -1,5 +1,7 @@
 'use client'
 
+import { MessageStatus } from './MessageStatus'
+
 interface ChatMessageProps {
   content: string
   senderName: string
@@ -7,6 +9,7 @@ interface ChatMessageProps {
   isImage: boolean
   imageUrl: string | null
   timestamp: string
+  status?: 'sending' | 'sent' | 'delivered' | 'read'
   onImageClick: () => void
 }
 
@@ -17,6 +20,7 @@ export function ChatMessage({
   isImage,
   imageUrl,
   timestamp,
+  status = 'sent',
   onImageClick
 }: ChatMessageProps) {
   return (
@@ -67,6 +71,8 @@ export function ChatMessage({
             </div>
           )}
         </div>
+
+        {isMe && <MessageStatus status={status} timestamp={timestamp} />}
       </div>
     </div>
   )
